@@ -2,7 +2,7 @@ name: Deploy Agent Exchange
 
 on:
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["Agent Exchange"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
