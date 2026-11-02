@@ -34,7 +34,10 @@ const server = createServer(async (request, response) => {
 
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const { port } = server.address();
-const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true });
+const browser = await chromium.launch({
+  executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || "/usr/bin/google-chrome",
+  headless: true,
+});
 
 async function runViewport(viewport, label) {
   resetForTests();
