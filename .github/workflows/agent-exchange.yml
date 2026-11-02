@@ -52,4 +52,4 @@ jobs:
       - name: Check for committed secrets
         run: |
           ! grep -RInE '(BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY|AKIA[0-9A-Z]{16}|BOT_TOKEN=|ALCHEMY_API_KEY=)' \
-            --exclude-dir=.git --exclude-dir=node_modules .
+            --exclude-dir=.git --exclude-dir=node_modules --exclude='agent-exchange.yml' .
