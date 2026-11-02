@@ -18,9 +18,9 @@ permissions:
 
 env:
   SERVICE_DIR: .
-  AWS_REGION: ${{ vars.AGENT_EXCHANGE_AWS_REGION || 'eu-north-1' }}
-  FUNCTION_NAME: ${{ vars.AGENT_EXCHANGE_FUNCTION_NAME || 'PrivateDAOAgentExchange-Function-N2zgpQmMN41S' }}
-  PUBLIC_BASE_URL: ${{ vars.AGENT_EXCHANGE_PUBLIC_BASE_URL || 'https://agents.privatedao.org' }}
+  AWS_REGION: ${{ vars.AGENT_EXCHANGE_AWS_REGION }}
+  FUNCTION_NAME: ${{ vars.AGENT_EXCHANGE_FUNCTION_NAME }}
+  PUBLIC_BASE_URL: ${{ vars.AGENT_EXCHANGE_PUBLIC_BASE_URL }}
 
 jobs:
   gate:
@@ -51,6 +51,13 @@ jobs:
           DEPLOY_SHA="$(git rev-parse HEAD)"
           echo "deploy_sha=$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
           echo "Deploy candidate: $DEPLOY_SHA"
+
+      - name: Require an explicit standalone deployment target
+        run: |
+          set -euo pipefail
+          test -n "$AWS_REGION" || { echo "::error::AGENT_EXCHANGE_AWS_REGION is not configured."; exit 1; }
+          test -n "$FUNCTION_NAME" || { echo "::error::AGENT_EXCHANGE_FUNCTION_NAME is not configured."; exit 1; }
+          test -n "$PUBLIC_BASE_URL" || { echo "::error::AGENT_EXCHANGE_PUBLIC_BASE_URL is not configured."; exit 1; }
 
       - name: Require successful CI and Agent Exchange checks for the same SHA
         env:
