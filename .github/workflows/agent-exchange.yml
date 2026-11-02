@@ -37,6 +37,9 @@ jobs:
       - name: Syntax and tests
         run: npm run lint && npm test && npm run smoke
 
+      - name: Verify Kernel boundary
+        run: npm run verify:kernel-boundary
+
       - name: Build deployment package and verify bundled assets
         run: npm run package -- /tmp/privatedao-agent-exchange.zip
 

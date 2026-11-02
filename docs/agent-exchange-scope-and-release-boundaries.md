@@ -94,9 +94,30 @@ The operator must stop before signing if any network, mint, recipient, amount,
 or expiry does not match the approved quote. Transaction signatures and receipts
 must be added to an evidence report only after independent verification.
 
+## Kernel integration contract
+
+Agent Exchange is independently deployable and currently has **no runtime
+dependency** on the PrivateDAO Kernel. It must not import, vendor, copy, or
+bundle Kernel implementation files. This is enforced by the standalone CI
+boundary check.
+
+If a future product flow needs Kernel capabilities, the integration must be
+introduced as a separately versioned external contract with:
+
+- an explicitly owned request and response schema;
+- authenticated service-to-service transport;
+- correlation id, idempotency key, timeout, and fail-closed error semantics;
+- receipt references instead of Kernel database or wallet access;
+- an independently reviewed compatibility version and rollback path.
+
+The Agent Exchange repository must remain deployable when that optional Kernel
+contract is unavailable. Kernel code, institutional credentials, policies,
+account records, and deployment configuration must remain in the Kernel
+repository and its secret-management boundary.
+
 ## Source-of-truth rule
 
-This directory is the single source for Agent Exchange runtime code. Historical
+This repository is the single source for Agent Exchange runtime code. Historical
 branches and worktrees are evidence or development history, not additional
 production implementations. Before deployment, the selected commit must contain
 the SealKeeper source, tests, and this boundary document together.
