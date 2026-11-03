@@ -106,7 +106,6 @@ jobs:
             return 1
           }
 
-          wait_for_workflow "CI"
           wait_for_workflow "Agent Exchange"
 
       - name: Decide whether the production Lambda needs a deployment
