@@ -24,10 +24,28 @@ assert.equal(health.marketplace, "active");
 assert.equal(health.paymentVerification, "finalized-usdc");
 
 const services = (await read("/api/services")).json();
-assert.ok(Array.isArray(services.services) && services.services.length >= 24, "service catalog is incomplete");
+assert.ok(Array.isArray(services.services) && services.services.length >= 27, "service catalog is incomplete");
 const privatePayService = services.services.find((service) => service.id === "privatepay.x402");
 assert.ok(privatePayService, "PrivatePAY service is missing from the catalog");
+assert.equal(services.services.filter((service) => service.id !== "privatepay.x402").length, 26, "catalog must expose 26 independent services plus PrivatePAY");
+assert.equal(privatePayService.container, true, "PrivatePAY must be the marketplace container");
+assert.equal(privatePayService.marketplace?.service_count, 26, "PrivatePAY marketplace must contain 26 services");
+assert.equal(privatePayService.marketplace?.x402_available_for_paid_services?.length, 23, "PrivatePAY x402 availability must be limited to paid services");
+assert.deepEqual(services.payment?.methods, ["direct_usdc", "privatepay_x402"], "payment methods must expose direct USDC and PrivatePAY x402");
 const privatePayStatus = (await read("/api/privatepay/status")).json();
+const autopilotStatus = (await read("/api/privatepay/autopilot/status")).json();
+assert.equal(privatePayStatus.payment_ingress_configured, true, "PrivatePAY payment ingress is not configured");
+assert.equal(privatePayStatus.merchant_accounts_delegated, true, "PrivatePAY merchant accounts are not delegated");
+const delegatedAccounts = privatePayStatus.merchant_account_delegation?.accounts;
+assert.ok(Array.isArray(delegatedAccounts), "PrivatePAY delegation account evidence is missing");
+for (const role of ["merchant", "payment_ingress"]) {
+  const account = delegatedAccounts.find((entry) => entry?.role === role);
+  assert.equal(account?.delegated, true, `PrivatePAY ${role} account is not delegated`);
+  assert.equal(account?.status, "delegated", `PrivatePAY ${role} delegation status is not delegated`);
+}
+assert.equal(autopilotStatus.custody, "delegated_agent_session_key", "Autopilot custody contract is stale");
+assert.equal(autopilotStatus.reusable_x402_credentials, false, "Autopilot must not expose reusable x402 credentials");
+assert.equal(autopilotStatus.policy_requires_explicit_network_asset_recipient_allowlists, true, "Autopilot target allowlists are missing");
 
 const providers = (await read("/api/providers/status")).json();
 const accountProviders = providers.providers.filter((provider) => provider.provider === "mongodb" && provider.role === "visitor-accounts-favorites-cart");
@@ -44,4 +62,4 @@ for (const tier of ["free", "basic", "pro"]) assert.match(sellerPage, new RegExp
 assert.match((await read("/robots.txt")).text, /Allow: \/sellers/);
 assert.match((await read("/sitemap.xml")).text, /\/sellers/);
 
-console.log(JSON.stringify({ base, status: "pass", marketplace: health.marketplace, paymentVerification: health.paymentVerification, services: services.services.length, privatePay: { catalogStatus: privatePayService.status, readiness: privatePayStatus.status, enabled: privatePayStatus.enabled, operational: privatePayStatus.operational }, accountProvider: accountProviders[0].status, sellerTiers: Object.keys(policy.seller_tiers).sort() }));
+console.log(JSON.stringify({ base, status: "pass", marketplace: health.marketplace, paymentVerification: health.paymentVerification, services: services.services.length, independentServices: 26, privatePay: { catalogStatus: privatePayService.status, readiness: privatePayStatus.status, enabled: privatePayStatus.enabled, operational: privatePayStatus.operational }, autopilot: { custody: autopilotStatus.custody, enabled: autopilotStatus.enabled }, accountProvider: accountProviders[0].status, sellerTiers: Object.keys(policy.seller_tiers).sort() }));

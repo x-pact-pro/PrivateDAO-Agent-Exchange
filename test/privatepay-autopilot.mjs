@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertAutopilotOperationFresh, decodeAutopilotSignature, privatePayAutopilotStatus } from "../src/privatepay-autopilot.mjs";
+import { assertAutopilotOperationFresh, assertAutopilotTargetAllowed, decodeAutopilotSignature, privatePayAutopilotStatus } from "../src/privatepay-autopilot.mjs";
 
 test("PrivatePAY Autopilot stays disabled without explicit activation and MongoDB", () => {
   const status = privatePayAutopilotStatus({
@@ -44,4 +44,20 @@ test("PrivatePAY Autopilot rejects an expired reserved operation", () => {
     return true;
   });
   assert.doesNotThrow(() => assertAutopilotOperationFresh({ expires_at: "2026-01-02T00:00:00.000Z" }, Date.parse("2026-01-01T00:00:00.000Z")));
+});
+
+test("PrivatePAY Autopilot requires an exact network, asset, and recipient allowlist", () => {
+  const policy = {
+    allowed_networks: ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"],
+    allowed_assets: ["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+    allowed_pay_to: ["11111111111111111111111111111111"],
+  };
+  assert.equal(assertAutopilotTargetAllowed(policy, {
+    network: policy.allowed_networks[0],
+    asset: policy.allowed_assets[0],
+    payTo: policy.allowed_pay_to[0],
+  }), true);
+  assert.throws(() => assertAutopilotTargetAllowed(policy, { network: "eip155:8453", asset: policy.allowed_assets[0], payTo: policy.allowed_pay_to[0] }), /network is not allowed/);
+  assert.throws(() => assertAutopilotTargetAllowed(policy, { network: policy.allowed_networks[0], asset: "So11111111111111111111111111111111111111112", payTo: policy.allowed_pay_to[0] }), /asset is not allowed/);
+  assert.throws(() => assertAutopilotTargetAllowed(policy, { network: policy.allowed_networks[0], asset: policy.allowed_assets[0], payTo: "11111111111111111111111111111112" }), /recipient is not allowed/);
 });

@@ -569,7 +569,7 @@ function providerRejectedError(message, code, response, payload = {}) {
     provider_status: response.status,
     facilitator_status: response.status,
     ...(PRIVATEPAY_ID.test(paymentId) ? { payment_id: paymentId } : {}),
-    ...(response.status === 202 ? { retryAfterSeconds: 2 } : {}),
+    ...([202, 502, 503, 504].includes(response.status) ? { retryAfterSeconds: 2 } : {}),
   });
 }
 
@@ -642,12 +642,18 @@ export async function requestPrivatePayCheckoutChallenge(config, input = {}, fet
   const paymentId = String(input.payment_id || input.paymentId || "").trim();
   if (!PRIVATEPAY_ID.test(paymentId))
     throw Object.assign(new Error("payment_id must be the 64-hex MagicBlock checkout id"), { statusCode: 400, code: "PRIVATEPAY_INVALID_CHECKOUT_ID" });
-  const response = await fetchImpl(privatePayProviderUrl(config, `/v1/x402/payments/${paymentId}/pay`), {
+  const request = {
     method: "POST",
     headers: merchantHeaders(config),
     body: JSON.stringify({}),
     signal: AbortSignal.timeout(8000),
-  });
+  };
+  let response;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    response = await fetchImpl(privatePayProviderUrl(config, `/v1/x402/payments/${paymentId}/pay`), request);
+    if (![502, 503, 504].includes(response.status) || attempt === 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
   const paymentRequiredHeader = readResponseHeader(response, "PAYMENT-REQUIRED");
   if (response.status === 402) {
     if (!paymentRequiredHeader)

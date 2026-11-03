@@ -10,6 +10,25 @@ This repository is initially a faithful source mirror of the former
 `integrations/agent-exchange-lambda` boundary. It must not be a rewrite and
 must not introduce a second payment or receipt implementation.
 
+## Product Catalog Decision
+
+The public Agent Exchange catalog has exactly 27 top-level entries:
+
+- 26 independently discoverable PrivateDAO services. Each service keeps its
+  own identifier, schema, access tier, execution boundary, receipt, and
+  availability state.
+- `privatepay.x402` as the 27th and final top-level entry. It is the
+  PrivatePAY x402 Marketplace/container, not a duplicate 27th analysis
+  service. Its marketplace metadata lists the 26 service identifiers and the
+  paid services that may select PrivatePAY x402 settlement.
+
+The container does not hide or merge the 26 services. A human customer or an
+authorized external agent can discover a service directly, request its quote,
+choose PrivatePAY x402 when that service is paid and the rail is available,
+and receive the normal service receipt. Free services remain free and must not
+be forced through a payment challenge. The wallet, Agent Exchange, and
+PrivatePAY integrations must preserve this hierarchy.
+
 ## Must remain unchanged during extraction
 
 - `https://agents.privatedao.org` and every existing public route.
@@ -56,9 +75,18 @@ Rollback is a deployment/version switch, not a database restore. Do not rename, 
 ## Current evidence
 
 - The current production deployment workflow already gates on same-SHA CI and Agent Exchange verification, captures the deployed Lambda package, validates its checksum, and publishes an immutable version.
-- The standalone repository root is the Agent Exchange source-of-truth boundary
-  after parity and canary acceptance.
-- No destination repository was found at `x-pact-pro/PrivateDAO-Agent-Exchange` during this assessment.
+- The standalone repository at `x-pact-pro/PrivateDAO-Agent-Exchange` is present locally and is the intended Agent Exchange source-of-truth boundary after parity and canary acceptance.
+- The catalog contract is implemented locally as 26 independent services plus the `privatepay.x402` marketplace container; the deployed public surface is stale until a reviewed release is published.
+- PrivatePAY Autopilot now requires exact service, CAIP-2 network, token mint, and payment-recipient allowlists, and binds those values into the signed operation challenge. The agent session private key remains external to PrivateDAO.
+- The local read-only release evidence is currently `blocked`: the required `payment_ingress` account is not configured, while the public status endpoint reports `enabled`. This discrepancy must be resolved before treating the rail as Mainnet-ready.
+- The release-evidence artifact is written to `output/privatepay/release-evidence.json`; collection performs no signing or broadcast.
+
+## Active readiness blockers
+
+- Configure and independently verify the required PrivatePAY payment ingress account and its delegation/funding state.
+- Publish and verify the reviewed Agent Exchange release so the live surface matches the local 27-entry catalog and autopilot contract.
+- Keep real trading and EVM transaction execution disabled until the production signer, policy checks, simulation, and recovery tests are independently accepted.
+- Complete the wallet release build, Android/Firebase matrix, external security review, and final production-readiness gate under available disk capacity.
 
 ## Explicit non-goals
 

@@ -193,6 +193,34 @@ test("MagicBlock checkout challenge returns the provider PAYMENT-REQUIRED header
   assert.doesNotMatch(JSON.stringify(result), /privateKey|signature|transaction/);
 });
 
+test("MagicBlock checkout challenge retries transient provider outages", async () => {
+  const calls = [];
+  const header = "eyJ4NDAyVmVyc2lvbiI6Mn0=";
+  const result = await requestPrivatePayCheckoutChallenge(magicBlockCheckoutConfig(), { payment_id: TEST_PAYMENT_ID }, async (url) => {
+    calls.push(url);
+    return calls.length === 1
+      ? response(503, { error: { code: "temporary_unavailable" } })
+      : response(402, {}, { "PAYMENT-REQUIRED": header });
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(result.status, "payment_required");
+  assert.equal(result.payment_required_header, header);
+});
+
+test("MagicBlock transient challenge failure exposes a bounded retry hint", async () => {
+  let calls = 0;
+  await assert.rejects(
+    requestPrivatePayCheckoutChallenge(magicBlockCheckoutConfig(), { payment_id: TEST_PAYMENT_ID }, async () => {
+      calls += 1;
+      return response(503, { error: { code: "temporary_unavailable" } });
+    }),
+    (error) => error.code === "PRIVATEPAY_CHALLENGE_REJECTED"
+      && error.statusCode === 503
+      && error.retryAfterSeconds === 2
+      && calls === 3,
+  );
+});
+
 test("MagicBlock SPL builder preserves documented 403 and 422 provider statuses", async () => {
   for (const [providerStatus, expectedStatus] of [[403, 403], [422, 422], [500, 503]]) {
     await assert.rejects(

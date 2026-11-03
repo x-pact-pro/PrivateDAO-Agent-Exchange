@@ -7,6 +7,7 @@ const MAX_OPERATION_BASE_UNITS = 100000000000n;
 const MAX_OPERATIONS = 10000;
 const MAX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
+const SOLANA_MAINNET_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 let clientPromise;
 
 function fail(message, code = "PRIVATEPAY_AUTOPILOT_INVALID", statusCode = 400) {
@@ -62,6 +63,26 @@ function normalizeServices(value) {
   return [...new Set(services)];
 }
 
+function normalizeNetworks(value) {
+  const networks = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (!networks.length || networks.length > 8 || networks.some((item) => !/^[a-z0-9][a-z0-9:.-]{1,120}$/i.test(item)))
+    fail("allowed_networks must contain 1 to 8 valid CAIP-2 network identifiers");
+  return [...new Set(networks)];
+}
+
+function normalizeAssets(value) {
+  const assets = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (!assets.length || assets.length > 20 || assets.some((item) => !/^[1-9A-HJ-NP-Za-km-z]{32,60}$/.test(item)))
+    fail("allowed_assets must contain 1 to 20 token mint addresses");
+  return [...new Set(assets)];
+}
+
+function normalizePayTo(value) {
+  const recipients = Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  if (!recipients.length || recipients.length > 20) fail("allowed_pay_to must contain 1 to 20 payment recipients");
+  return [...new Set(recipients.map((item) => address(item, "allowed_pay_to recipient")))];
+}
+
 function normalizePolicyInput(input = {}) {
   const owner = address(input.owner, "owner");
   const sessionPublicKey = address(input.session_public_key || input.sessionPublicKey, "session_public_key");
@@ -72,7 +93,18 @@ function normalizePolicyInput(input = {}) {
   if (!Number.isInteger(maxOperations) || maxOperations < 1 || maxOperations > MAX_OPERATIONS) fail("max_operations must be between 1 and 10000");
   const ttlMs = Number(input.ttl_ms || input.ttlMs || 24 * 60 * 60 * 1000);
   if (!Number.isInteger(ttlMs) || ttlMs < 60_000 || ttlMs > MAX_TTL_MS) fail("ttl_ms must be between 60000 and 604800000");
-  return { owner, session_public_key: sessionPublicKey, budget_base_units: budget, max_per_operation_base_units: maxPerOperation, max_operations: maxOperations, ttl_ms: ttlMs, allowed_services: normalizeServices(input.allowed_services || input.allowedServices) };
+  return {
+    owner,
+    session_public_key: sessionPublicKey,
+    budget_base_units: budget,
+    max_per_operation_base_units: maxPerOperation,
+    max_operations: maxOperations,
+    ttl_ms: ttlMs,
+    allowed_services: normalizeServices(input.allowed_services || input.allowedServices),
+    allowed_networks: normalizeNetworks(input.allowed_networks || input.allowedNetworks),
+    allowed_assets: normalizeAssets(input.allowed_assets || input.allowedAssets),
+    allowed_pay_to: normalizePayTo(input.allowed_pay_to || input.allowedPayTo),
+  };
 }
 
 async function collections(config) {
@@ -106,7 +138,8 @@ export function privatePayAutopilotStatus(config) {
       ...(!configured ? ["explicit autopilot activation is disabled"] : []),
       ...(!storage ? ["MongoDB storage is not configured"] : []),
     ],
-    custody: "session_wallet_only",
+    custody: "delegated_agent_session_key",
+    policy_requires_explicit_network_asset_recipient_allowlists: true,
     reusable_x402_credentials: false,
     policy_limits: { max_ttl_ms: MAX_TTL_MS, max_operations: MAX_OPERATIONS, max_budget_base_units: String(MAX_BUDGET_BASE_UNITS) },
   };
@@ -151,7 +184,17 @@ export async function createPrivatePayAutopilotPolicy(config, input = {}) {
 }
 
 function publicPolicy(policy) {
-  return { policy_id: policy.id, owner: policy.owner, session_public_key: policy.session_public_key, allowed_services: policy.allowed_services, budget_base_units: String(policy.budget_base_units), max_per_operation_base_units: String(policy.max_per_operation_base_units), max_operations: policy.max_operations, reserved_base_units: String(policy.reserved_base_units || 0), spent_base_units: String(policy.spent_base_units || 0), reserved_operations: policy.reserved_operations || 0, completed_operations: policy.completed_operations || 0, status: policy.status, expires_at: policy.expires_at, custody: "session_wallet_only", note: "PrivateDAO never receives the session private key" };
+  return { policy_id: policy.id, owner: policy.owner, session_public_key: policy.session_public_key, allowed_services: policy.allowed_services, allowed_networks: policy.allowed_networks, allowed_assets: policy.allowed_assets, allowed_pay_to: policy.allowed_pay_to, budget_base_units: String(policy.budget_base_units), max_per_operation_base_units: String(policy.max_per_operation_base_units), max_operations: policy.max_operations, reserved_base_units: String(policy.reserved_base_units || 0), spent_base_units: String(policy.spent_base_units || 0), reserved_operations: policy.reserved_operations || 0, completed_operations: policy.completed_operations || 0, status: policy.status, expires_at: policy.expires_at, custody: "delegated_agent_session_key", note: "PrivateDAO never receives the agent session private key" };
+}
+
+export function assertAutopilotTargetAllowed(policy, { network, asset, payTo } = {}) {
+  if (!policy?.allowed_networks?.includes(String(network || "")))
+    fail("payment network is not allowed by this autopilot policy", "PRIVATEPAY_AUTOPILOT_NETWORK_NOT_ALLOWED", 403);
+  if (!policy?.allowed_assets?.includes(String(asset || "")))
+    fail("payment asset is not allowed by this autopilot policy", "PRIVATEPAY_AUTOPILOT_ASSET_NOT_ALLOWED", 403);
+  if (!policy?.allowed_pay_to?.includes(String(payTo || "")))
+    fail("payment recipient is not allowed by this autopilot policy", "PRIVATEPAY_AUTOPILOT_RECIPIENT_NOT_ALLOWED", 403);
+  return true;
 }
 
 async function activePolicy(config, policyId) {
@@ -170,12 +213,16 @@ export async function createPrivatePayAutopilotOperationChallenge(config, input 
   if (!policy.allowed_services.includes(providerId)) fail("provider_id is not allowed by this autopilot policy", "PRIVATEPAY_AUTOPILOT_SERVICE_NOT_ALLOWED", 403);
   const amount = positiveUnits(input.amount_base_units, "amount_base_units", MAX_OPERATION_BASE_UNITS);
   if (BigInt(amount) > BigInt(policy.max_per_operation_base_units)) fail("amount exceeds the autopilot per-operation limit", "PRIVATEPAY_AUTOPILOT_OPERATION_LIMIT", 403);
+  const network = String(input.network || "").trim();
+  const asset = String(input.asset || "").trim();
+  const payTo = String(input.pay_to || input.payTo || "").trim();
+  assertAutopilotTargetAllowed(policy, { network, asset, payTo });
   const operationId = `paut_op_${randomUUID().replaceAll("-", "")}`;
   const challengeId = `paut_op_ch_${randomUUID().replaceAll("-", "")}`;
   const expires = new Date(Date.now() + CHALLENGE_TTL_MS).toISOString();
-  const message = canonicalMessage("operation", { amount_base_units: amount, challenge_id: challengeId, operation_id: operationId, policy_id: policy.id, provider_id: providerId, resource });
+  const message = canonicalMessage("operation", { amount_base_units: amount, asset, challenge_id: challengeId, network, operation_id: operationId, pay_to: payTo, policy_id: policy.id, provider_id: providerId, resource });
   const { challenges } = await collections(config);
-  await challenges.insertOne({ id: challengeId, kind: "operation", policy_id: policy.id, operation_id: operationId, resource, provider_id: providerId, amount_base_units: amount, message, created_at: new Date().toISOString(), expires_at: expires });
+  await challenges.insertOne({ id: challengeId, kind: "operation", policy_id: policy.id, operation_id: operationId, resource, provider_id: providerId, amount_base_units: amount, network, asset, pay_to: payTo, message, created_at: new Date().toISOString(), expires_at: expires });
   return { challenge_id: challengeId, operation_id: operationId, policy_id: policy.id, message, expires_at: expires, signing: "base64 Ed25519 signature by session_public_key" };
 }
 
@@ -189,7 +236,7 @@ export async function authorizePrivatePayAutopilotOperation(config, input = {}) 
   const now = new Date().toISOString();
   const consumed = await challenges.findOneAndUpdate({ id: challenge.id, used_at: { $exists: false }, expires_at: { $gt: now } }, { $set: { used_at: now } });
   if (!consumed) fail("autopilot operation challenge was already used", "PRIVATEPAY_AUTOPILOT_CHALLENGE_USED", 409);
-  const reservation = { id: challenge.operation_id, policy_id: policy.id, owner: policy.owner, resource: challenge.resource, provider_id: challenge.provider_id, amount_base_units: challenge.amount_base_units, authorization_message: challenge.message, status: "reserved", created_at: now, expires_at: challenge.expires_at };
+  const reservation = { id: challenge.operation_id, policy_id: policy.id, owner: policy.owner, resource: challenge.resource, provider_id: challenge.provider_id, amount_base_units: challenge.amount_base_units, network: challenge.network, asset: challenge.asset, pay_to: challenge.pay_to, authorization_message: challenge.message, status: "reserved", created_at: now, expires_at: challenge.expires_at };
   const amount = BigInt(challenge.amount_base_units);
   const result = await operations.insertOne(reservation).then(async () => {
     const updated = await collections(config).then(({ policies }) => policies.findOneAndUpdate({ id: policy.id, status: "active", expires_at: { $gt: now }, $expr: { $and: [{ $lte: [{ $add: [{ $toLong: { $ifNull: ["$spent_base_units", "0"] } }, { $toLong: { $ifNull: ["$reserved_base_units", "0"] } }, Number(amount)] }, { $toLong: "$budget_base_units" }] }, { $lt: [{ $add: [{ $ifNull: ["$completed_operations", 0] }, { $ifNull: ["$reserved_operations", 0] }] }, "$max_operations"] }] } }, { $inc: { reserved_base_units: Number(amount), reserved_operations: 1 }, $set: { updated_at: now } }));
@@ -197,7 +244,7 @@ export async function authorizePrivatePayAutopilotOperation(config, input = {}) 
     return { reserved: true };
   });
   if (!result.reserved) fail("autopilot policy budget or operation limit was reached", "PRIVATEPAY_AUTOPILOT_POLICY_LIMIT", 403);
-  return { operation_id: reservation.id, policy_id: policy.id, nonce: reservation.id, resource: reservation.resource, provider_id: reservation.provider_id, amount_base_units: reservation.amount_base_units, status: "reserved", expires_at: reservation.expires_at, payment_per_operation: true, x402_next_request: "POST /api/privatepay/x402 with the same resource, provider_id, amount_base_units, autopilot_policy_id, autopilot_operation_id, autopilot_session_signature, and a fresh PAYMENT-SIGNATURE" };
+  return { operation_id: reservation.id, policy_id: policy.id, nonce: reservation.id, resource: reservation.resource, provider_id: reservation.provider_id, amount_base_units: reservation.amount_base_units, network: reservation.network, asset: reservation.asset, pay_to: reservation.pay_to, status: "reserved", expires_at: reservation.expires_at, payment_per_operation: true, x402_next_request: "POST /api/privatepay/x402 with the same resource, provider_id, amount_base_units, network, asset, pay_to, autopilot_policy_id, autopilot_operation_id, autopilot_session_signature, and a fresh PAYMENT-SIGNATURE" };
 }
 
 export async function validatePrivatePayAutopilotOperation(config, input = {}) {
@@ -206,6 +253,8 @@ export async function validatePrivatePayAutopilotOperation(config, input = {}) {
   const { operations } = await collections(config);
   const operation = await operations.findOne({ id: String(input.operation_id || ""), policy_id: policy.id, status: "reserved" });
   if (!operation || operation.resource !== String(input.resource || "") || operation.provider_id !== String(input.provider_id || "") || operation.amount_base_units !== String(input.amount_base_units || "")) fail("autopilot operation does not match this x402 request", "PRIVATEPAY_AUTOPILOT_OPERATION_MISMATCH", 403);
+  if (operation.network !== String(input.network || "") || operation.asset !== String(input.asset || "") || operation.pay_to !== String(input.pay_to || input.payTo || "")) fail("autopilot operation target does not match this x402 request", "PRIVATEPAY_AUTOPILOT_TARGET_MISMATCH", 403);
+  assertAutopilotTargetAllowed(policy, { network: input.network, asset: input.asset, payTo: input.pay_to || input.payTo });
   assertAutopilotOperationFresh(operation);
   if (input.session_signature) verifySignedMessage(policy.session_public_key, operation.authorization_message, input.session_signature, "autopilot_session_signature");
   else fail("autopilot_session_signature is required for the x402 request", "PRIVATEPAY_AUTOPILOT_SESSION_SIGNATURE_REQUIRED", 403);

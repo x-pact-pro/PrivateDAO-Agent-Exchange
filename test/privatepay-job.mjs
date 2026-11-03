@@ -273,6 +273,47 @@ test("PrivatePAY jobs persist a pending checkout and fetch its challenge on retr
   }
 });
 
+test("PrivatePAY job rejects a provider challenge whose amount differs from the local quote", async () => {
+  const originalFetch = globalThis.fetch;
+  let checkoutRequest;
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.endsWith("/v1/payments")) {
+      checkoutRequest = JSON.parse(init.body || "{}");
+      return new Response(JSON.stringify({ id: "e".repeat(64), status: "created" }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (target.includes("/v1/x402/payments/") && target.endsWith("/pay")) {
+      const accepted = {
+        scheme: "exact-magicblock",
+        network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        amount: String(Number(checkoutRequest.amount) + 1),
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        maxTimeoutSeconds: 60,
+        extra: { paymentId: "e".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+      };
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource, description: "fixture" }, accepts: [accepted] }) } });
+    }
+    const payload = JSON.parse(init.body || "{}");
+    if (payload.method === "getAccountInfo")
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: null } }), { status: 200, headers: { "content-type": "application/json" } });
+    throw new Error(`unexpected fixture request: ${target}`);
+  };
+  try {
+    resetForTests();
+    const response = await request("/api/jobs", "POST", {
+      service_id: "verify.deep",
+      payment_mode: "privatepay",
+      input: { record: { lifecycle: "provider-quote-mismatch" } },
+      payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6",
+    });
+    assert.equal(response.statusCode, 503);
+    assert.match(response.body, /PRIVATEPAY_PROVIDER_QUOTE_MISMATCH/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("generic PrivatePAY x402 endpoint performs verify and settle with a redacted response", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

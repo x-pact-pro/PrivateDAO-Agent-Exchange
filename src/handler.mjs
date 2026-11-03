@@ -267,6 +267,17 @@ function activeRegistryAgent(agent) {
 async function activeRegistryAgents() {
   return (await (await store()).list("Registry")).filter(activeRegistryAgent);
 }
+function privatePayMarketplaceDescriptor() {
+  const services = SERVICES.filter((service) => service.id !== PRIVATEPAY_SERVICE_ID);
+  return {
+    id: PRIVATEPAY_SERVICE_ID,
+    service_count: services.length,
+    service_ids: services.map((service) => service.id),
+    x402_available_for_paid_services: services.filter((service) => service.access === "paid").map((service) => service.id),
+    payment_mode: "privatepay",
+    note: "PrivatePAY x402 is the marketplace container. First-party services remain independently discoverable; paid services may select private x402 settlement.",
+  };
+}
 function firstPartyDiscovery() {
   return {
     id: "privatedao-agent-exchange",
@@ -277,6 +288,7 @@ function firstPartyDiscovery() {
     capabilities: ["verification", "multichain-intelligence", "risk-review", "transaction-context", "agent-coordination"],
     networks: [...LIVE_NETWORKS],
     services: SERVICES.map((service) => service.id),
+    privatepay_marketplace: privatePayMarketplaceDescriptor(),
     payment_asset: "USDC",
     payment_network: "solana-mainnet-beta",
     discovery_type: "first_party",
@@ -844,15 +856,18 @@ function openapi() {
   const autopilotPolicyInput = {
     type: "object",
     additionalProperties: false,
-    required: ["owner", "session_public_key", "budget_base_units", "max_per_operation_base_units", "max_operations", "ttl_ms"],
+    required: ["owner", "session_public_key", "budget_base_units", "max_per_operation_base_units", "max_operations", "ttl_ms", "allowed_networks", "allowed_assets", "allowed_pay_to"],
     properties: {
       owner: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$", description: "Connected Solana owner wallet public key; never a private key." },
-      session_public_key: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$", description: "Short-lived agent session public key; its private key remains in the user's signer." },
+      session_public_key: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$", description: "Agent session public key; the matching private key remains with the authorized agent and is never sent to PrivateDAO." },
       budget_base_units: { type: "string", pattern: "^[0-9]+$", description: "Maximum aggregate USDC base units reserved by this policy." },
       max_per_operation_base_units: { type: "string", pattern: "^[0-9]+$", description: "Maximum USDC base units for one operation." },
       max_operations: { type: "integer", minimum: 1, maximum: 10000 },
       ttl_ms: { type: "integer", minimum: 60000, maximum: 604800000, description: "Policy lifetime in milliseconds; maximum seven days." },
       allowed_services: { type: "array", minItems: 1, maxItems: 20, items: { type: "string" } },
+      allowed_networks: { type: "array", minItems: 1, maxItems: 8, items: { type: "string", description: "CAIP-2 network identifier" } },
+      allowed_assets: { type: "array", minItems: 1, maxItems: 20, items: { type: "string", description: "Token mint address" } },
+      allowed_pay_to: { type: "array", minItems: 1, maxItems: 20, items: { type: "string", description: "Exact payment recipient address" } },
     },
   };
   const privatePayCheckoutInput = {
@@ -976,10 +991,10 @@ function openapi() {
     "/api/integrations": { get: { operationId: "integrations" } },
     "/api/privatepay/status": { get: { operationId: "privatePayStatus", summary: "Read PrivatePAY readiness", description: "Read-only, fail-closed status for the Solana Mainnet PrivatePAY x402 rail, MagicBlock private settlement, PDAO entry rule, fees, and privacy boundary.", responses: { "200": { description: "Current readiness and privacy status", content: { "application/json": { schema: privatePayResponse } } } } } },
     "/api/privatepay/wallet-balance": { get: { operationId: "privatePayWalletBalance", summary: "Read wallet balances", description: "Read-only Solana Mainnet balance lookup for the connected public wallet. No signature, payment, or private key is requested.", parameters: [{ name: "wallet", in: "query", required: true, schema: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" } }], responses: { "200": { description: "SOL, USDC, and PDAO balances" }, "400": { description: "Invalid wallet" }, "503": { description: "RPC unavailable" } } } },
-    "/api/privatepay/autopilot/status": { get: { operationId: "privatePayAutopilotStatus", summary: "Read Autopilot status", description: "Read-only status for bounded PrivatePAY Autopilot policies. Session-wallet custody, limits, and explicit activation state are returned; reusable x402 credentials are never enabled.", responses: { "200": { description: "Autopilot configuration status", content: { "application/json": { schema: privatePayResponse } } } } } },
+    "/api/privatepay/autopilot/status": { get: { operationId: "privatePayAutopilotStatus", summary: "Read Autopilot status", description: "Read-only status for bounded PrivatePAY Autopilot policies. Delegated agent-session custody, explicit target allowlists, limits, and activation state are returned; reusable x402 credentials are never enabled.", responses: { "200": { description: "Autopilot configuration status", content: { "application/json": { schema: privatePayResponse } } } } } },
     "/api/privatepay/autopilot/challenge": { post: { operationId: "privatePayAutopilotChallenge", summary: "Create an Autopilot challenge", description: "Create a fresh challenge before a user creates a bounded session policy. This does not move funds.", requestBody: { required: true, content: { "application/json": { schema: autopilotPolicyInput } } }, responses: { "200": { description: "Fresh challenge" }, "403": { description: "Entry policy rejected" }, "503": { description: "Autopilot not explicitly activated" } } } },
-    "/api/privatepay/autopilot/policies": { post: { operationId: "privatePayAutopilotPolicy", summary: "Create a bounded Autopilot policy", description: "Create a session-wallet policy with maximum amount, budget, operation count, TTL, and allowed services. The main wallet key is never stored.", requestBody: { required: true, content: { "application/json": { schema: autopilotPolicyInput } } }, responses: { "201": { description: "Policy created" }, "503": { description: "Autopilot not explicitly activated" } } } },
-    "/api/privatepay/autopilot/operation-challenge": { post: { operationId: "privatePayAutopilotOperationChallenge", summary: "Authorize one Autopilot operation", description: "Reserve one operation against an active policy after checking its service, budget, amount, expiry, and remaining count.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id", "resource", "provider_id", "amount_base_units"], properties: { policy_id: { type: "string" }, resource: { type: "string", format: "uri" }, provider_id: { type: "string" }, amount_base_units: { type: "string", pattern: "^[0-9]+$" } }, additionalProperties: false } } } }, responses: { "200": { description: "Operation challenge" }, "409": { description: "Policy limit rejected" } } } },
+    "/api/privatepay/autopilot/policies": { post: { operationId: "privatePayAutopilotPolicy", summary: "Create a bounded Autopilot policy", description: "Create a delegated agent-session policy with maximum amount, budget, operation count, TTL, service allowlist, network allowlist, token-mint allowlist, and exact payment-recipient allowlist. Neither the main wallet key nor the agent session private key is stored.", requestBody: { required: true, content: { "application/json": { schema: autopilotPolicyInput } } }, responses: { "201": { description: "Policy created" }, "503": { description: "Autopilot not explicitly activated" } } } },
+    "/api/privatepay/autopilot/operation-challenge": { post: { operationId: "privatePayAutopilotOperationChallenge", summary: "Authorize one Autopilot operation", description: "Reserve one operation against an active policy after checking its service, amount, expiry, network, asset, exact payment recipient, and remaining count.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id", "resource", "provider_id", "amount_base_units", "network", "asset", "pay_to"], properties: { policy_id: { type: "string" }, resource: { type: "string", format: "uri" }, provider_id: { type: "string" }, amount_base_units: { type: "string", pattern: "^[0-9]+$" }, network: { type: "string" }, asset: { type: "string" }, pay_to: { type: "string" } }, additionalProperties: false } } } }, responses: { "200": { description: "Operation challenge" }, "403": { description: "Target or policy rejected" }, "409": { description: "Policy limit rejected" } } } },
     "/api/privatepay/autopilot/operations": { post: { operationId: "privatePayAutopilotOperation", summary: "Authorize a bounded operation", description: "Accept a session signature for one previously challenged operation and return the exact x402 next-request context.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id", "operation_id", "session_signature"], properties: { policy_id: { type: "string" }, operation_id: { type: "string" }, session_signature: { type: "string" } }, additionalProperties: false } } } }, responses: { "201": { description: "Operation authorized" }, "409": { description: "Operation rejected or already consumed" } } } },
     "/api/privatepay/autopilot/cancel": { post: { operationId: "privatePayAutopilotCancel", summary: "Cancel an Autopilot policy or operation", description: "Stop future automated operations and release unused reservations. This does not reverse a completed settlement.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id"], properties: { policy_id: { type: "string" }, operation_id: { type: "string" } }, additionalProperties: false } } } }, responses: { "200": { description: "Cancellation recorded" } } } },
     "/api/privatepay/x402": { post: { operationId: "privatePayX402", summary: "Pay a PrivatePAY x402 request", description: "Return HTTP 402 requirements when payment is absent, or verify and settle a finalized x402 v2 payment through the reviewed MagicBlock private facilitator. The route is fail-closed and requires the PDAO private-settlement fee rule.", parameters: [{ name: "PAYMENT-SIGNATURE", in: "header", required: false, schema: { type: "string" } }], requestBody: { required: true, content: { "application/json": { schema: privatePayRequirementsInput } } }, responses: { "200": { description: "Private payment settled" }, "402": { description: "Fresh x402 payment requirements" }, "503": { description: "Settlement pending or private rail unavailable" } } } },
@@ -1055,6 +1070,7 @@ ${categories}
 Free: ${free}
 Paid: ${paid}
 Gated payment rails: ${gated}
+PrivatePAY x402 is the marketplace container for the 26 independent services. It is listed as the 27th catalog entry; paid services may use it, while free services remain free.
 All paid services are quote-first. POST /api/jobs with service_id and input. A paid request returns HTTP 402 and payment_intent; do not pay before reading the exact amount, mint, treasury token account, payment reference, expiry, and payment network. The payment rail is finalized Solana Mainnet USDC. The paying agent signs its own transaction. Submit the finalized signature to POST /api/jobs/{jobId}/payment, then poll GET /api/jobs/{jobId}; retrieve and verify GET /api/receipts/{receiptId}. If payment was accepted but execution returns HTTP 409 with recovery_required, do not resubmit the signature: the service is intentionally not replayed automatically. Never send private keys or seed phrases.
 
 ## PDAO utility
@@ -1544,6 +1560,9 @@ function serviceManifest(service) {
     estimated_completion_behavior: isPrivatePay
       ? "gated_privatepay_x402_challenge"
       : service.access === "free" ? "immediate_read_only" : "payment_required_then_read_only_execution",
+    ...(isPrivatePay
+      ? { container: true, marketplace: privatePayMarketplaceDescriptor(), flow: "marketplace_container" }
+      : { privatepay_x402_available: service.access === "paid", flow: service.access === "paid" ? "quote_then_payment_choice_then_execute" : "free_execute" }),
   };
 }
 function validateServiceInput(serviceId, input = {}) {
@@ -3872,6 +3891,25 @@ async function createJob(serviceId, input, admin = false, currency = "USDC", met
   return await completeJob(job, execution.result, null, execution.telemetry);
 }
 
+function assertPrivatePayJobQuoteBinding(localRequirements, providerRequirements) {
+  const local = localRequirements?.accepts?.[0];
+  const provider = providerRequirements?.accepts?.[0];
+  const same = local && provider
+    && provider.scheme === local.scheme
+    && provider.network === local.network
+    && provider.asset === local.asset
+    && provider.amount === local.amount
+    && provider.extra?.cluster === local.extra?.cluster
+    && provider.extra?.settlement === local.extra?.settlement;
+  if (!same) {
+    throw Object.assign(new Error("PrivatePAY provider challenge does not match the locally quoted amount, asset, network, or settlement rail"), {
+      statusCode: 503,
+      code: "PRIVATEPAY_PROVIDER_QUOTE_MISMATCH",
+    });
+  }
+  return providerRequirements;
+}
+
 async function createPrivatePayJobChallenge({ jobId, serviceId, payer, amount_base_units, pdao_benefits = false }) {
   const resource = `https://${config.domain}/api/jobs/${jobId}/privatepay`;
   const liveStatus = await privatePayReadiness();
@@ -3914,7 +3952,10 @@ async function createPrivatePayJobChallenge({ jobId, serviceId, payer, amount_ba
       retry_after_seconds: challenge.retry_after_seconds || 2,
     };
   }
-  const providerRequirements = decodePrivatePayRequiredHeader(challenge.payment_required_header);
+  const providerRequirements = assertPrivatePayJobQuoteBinding(
+    localPayment.requirements,
+    decodePrivatePayRequiredHeader(challenge.payment_required_header),
+  );
   return {
     request_id: localPayment.request_id,
     requirements: providerRequirements,
@@ -5504,8 +5545,9 @@ async function handle(e) {
       services: SERVICES.map(serviceManifest),
       products: PRODUCTS.map(publicProduct),
       marketplace_packaging: publicMarketplacePackaging(),
+      privatepay_marketplace: privatePayMarketplaceDescriptor(),
       integrations: integrationDirectory(),
-      payment: { quote_first: true, network: "solana-mainnet-beta", asset: "USDC", finalized_transaction_required: true },
+      payment: { quote_first: true, network: "solana-mainnet-beta", asset: "USDC", finalized_transaction_required: true, methods: ["direct_usdc", "privatepay_x402"], privatepay_marketplace: PRIVATEPAY_SERVICE_ID },
       pdao_utility: PDAO_UTILITY,
       discovery: `https://${config.domain}/.well-known/agent-card.json`,
       mcp: `https://${config.domain}/mcp`,
@@ -5518,6 +5560,8 @@ async function handle(e) {
         network: "solana-mainnet-beta",
         treasury: config.treasury,
         usdc_mint: config.usdcMint,
+        methods: ["direct_usdc", "privatepay_x402"],
+        privatepay_marketplace: privatePayMarketplaceDescriptor(),
       },
       pdao_utility: PDAO_UTILITY,
     });
@@ -5658,6 +5702,9 @@ async function handle(e) {
         resource: x402Input.resource,
         provider_id: x402Input.provider_id,
         amount_base_units: x402Input.amount_base_units,
+        network: requirements.requirements.accepts[0].network,
+        asset: requirements.requirements.accepts[0].asset,
+        pay_to: requirements.requirements.accepts[0].payTo,
         session_signature: x402Input.autopilot_session_signature,
       })
       : null;
@@ -5753,9 +5800,12 @@ async function handle(e) {
       const providerAccepts = providerRequirements.accepts[0];
       const localAccepts = requirements.requirements.accepts[0];
       if (providerAccepts?.extra?.paymentId !== checkout.payment_id
+        || providerAccepts?.scheme !== localAccepts.scheme
         || providerAccepts?.amount !== localAccepts.amount
         || providerAccepts?.asset !== localAccepts.asset
-        || providerAccepts?.network !== localAccepts.network)
+        || providerAccepts?.network !== localAccepts.network
+        || providerAccepts?.extra?.cluster !== localAccepts.extra?.cluster
+        || providerAccepts?.extra?.settlement !== localAccepts.extra?.settlement)
         throw Object.assign(new Error("MagicBlock returned a challenge for a different checkout"), { statusCode: 502, code: "PRIVATEPAY_CHECKOUT_BINDING_MISMATCH" });
       await checkoutStore.put("Payments", requestKey, { ...nextBinding, state: "payment_required", updated_at: now() });
       await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, { ...nextBinding, state: "payment_required", updated_at: now() });
@@ -6636,6 +6686,7 @@ async function mcp(request) {
         categories: SERVICE_CATEGORIES,
         endpoints: { mcp: `https://${config.domain}/mcp`, agent_card: `https://${config.domain}/.well-known/agent-card.json`, services: `https://${config.domain}/api/services`, pricing: `https://${config.domain}/api/pricing`, integrations: `https://${config.domain}/api/integrations`, openapi: `https://${config.domain}/openapi.json` },
         payment: { quote_first: true, asset: "USDC", network: "solana-mainnet-beta", finalized_transaction_required: true, agent_signs_transaction: true },
+        privatepay_marketplace: privatePayMarketplaceDescriptor(),
         verification: { receipt_endpoint: `https://${config.domain}/api/receipts/{receiptId}`, result_hashes: true, provider_provenance: true },
         pdao_utility: PDAO_UTILITY,
         guidance: "Use service_recommendation for task selection, pdao_services for exact schemas, and payment_guide before any paid action. PDAO holder access is separate from ordinary quote-first USDC settlement.",
@@ -6649,9 +6700,10 @@ async function mcp(request) {
       else if (name === "provider_integrations") result = { integrations: integrationDirectory(), provider_status: [intelProviderStatus(config), ibmProviderStatus(config), mongoProviderStatus(config), githubProviderStatus(config)], disclosure: "Tested client interoperability and program participation do not imply official partnership, certification or directory placement." };
       else if (name === "payment_guide") result = {
         free: "POST /api/jobs with verify.basic or another free service; receive the result and receipt immediately.",
-        paid: ["POST /api/jobs", "expect HTTP 402", "read payment_intent exactly", "send exact finalized USDC on Solana Mainnet to the quoted treasury token account with the quoted reference", "POST /api/jobs/{jobId}/payment with the finalized signature", "GET /api/jobs/{jobId}", "GET /api/receipts/{receiptId}"],
+        paid: ["POST /api/jobs", "expect HTTP 402", "read payment_intent exactly", "choose direct finalized USDC or PrivatePAY x402 when offered", "send or authorize only the exact quoted payment", "POST /api/jobs/{jobId}/payment with the finalized signature or follow the PrivatePAY x402 challenge", "GET /api/jobs/{jobId}", "GET /api/receipts/{receiptId}"],
+        privatepay_marketplace: privatePayMarketplaceDescriptor(),
         pdao_utility: PDAO_UTILITY,
-        rules: ["quote first", "do not pay an amount from catalog text alone", "do not send private keys or seed phrases", "target network is separate from payment network", "PDAO holder access uses a signed wallet challenge and sends no transaction", "do not substitute PDAO for the quoted USDC payment intent", "payment is not execution authorization for writes", "HTTP 409 recovery_required means do not replay the payment or service"],
+        rules: ["quote first", "do not pay an amount from catalog text alone", "do not send private keys or seed phrases", "target network is separate from payment network", "PDAO holder access uses a signed wallet challenge and sends no transaction", "PrivatePAY x402 is optional for paid services and is not available for free services", "do not substitute PDAO for the quoted USDC payment intent", "payment is not execution authorization for writes", "HTTP 409 recovery_required means do not replay the payment or service"],
       };
       else if (name === "privatepay_status") result = await probePrivatePayRail(config);
       else if (name === "privatepay_challenge") result = await createPrivatePayChallenge(config, a, await privatePayReadiness());

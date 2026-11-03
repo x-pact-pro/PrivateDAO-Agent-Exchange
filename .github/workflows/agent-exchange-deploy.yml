@@ -417,6 +417,16 @@ jobs:
           aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
           echo "Payout runtime configuration reconciled."
 
+      - name: Verify live Agent Exchange contract
+        id: live_surface
+        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
+        continue-on-error: true
+        env:
+          AGENT_EXCHANGE_PUBLIC_BASE_URL: ${{ env.PUBLIC_BASE_URL }}
+        run: |
+          set -euo pipefail
+          npm run verify:live-surface
+
       - name: Reconcile scheduled seller settlement trigger
         id: settlement_schedule
         if: steps.deploy_code.outcome == 'success'
@@ -453,6 +463,7 @@ jobs:
             steps.cors.outcome == 'failure' ||
             steps.smoke.outcome == 'failure' ||
             steps.payout_runtime.outcome == 'failure' ||
+            steps.live_surface.outcome == 'failure' ||
             steps.settlement_schedule.outcome == 'failure'
           )
         continue-on-error: true
@@ -502,6 +513,7 @@ jobs:
             steps.cors.outcome == 'failure' ||
             steps.smoke.outcome == 'failure' ||
             steps.payout_runtime.outcome == 'failure' ||
+            steps.live_surface.outcome == 'failure' ||
             steps.settlement_schedule.outcome == 'failure'
           )
         run: |
@@ -519,6 +531,7 @@ jobs:
           steps.cors.outcome == 'success' &&
           steps.smoke.outcome == 'success' &&
           steps.payout_runtime.outcome == 'success' &&
+          steps.live_surface.outcome == 'success' &&
           steps.settlement_schedule.outcome == 'success'
         run: |
           {
