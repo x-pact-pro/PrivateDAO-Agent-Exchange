@@ -139,6 +139,35 @@ async function probeSettlementVisibility(signature) {
 const settlementVisibility = await probeSettlementVisibility(settlementSignature);
 
 const artifact = JSON.parse(await readFile(artifactPath, "utf8"));
+const acceptedChallenge = artifact.paymentRequired?.accepts?.[0] || null;
+const challengeCreatedAt = Date.parse(String(artifact.createdAt || artifact.generatedAt || ""));
+const challengeAgeMs = Number.isFinite(challengeCreatedAt) ? Math.max(0, Date.now() - challengeCreatedAt) : null;
+const challengeMaxAgeMs = Number(process.env.PRIVATEPAY_CHALLENGE_MAX_AGE_MS || 15 * 60 * 1000);
+const paymentIdMatchesStatus = Boolean(artifact.paymentId)
+  && artifact.paymentId === x402Status?.paymentId;
+const x402Challenge = {
+  artifactPresent: true,
+  paymentIdMatchesStatus,
+  challengeAgeMs,
+  challengeMaxAgeMs,
+  fresh: challengeAgeMs !== null && challengeAgeMs <= challengeMaxAgeMs,
+  statusReadable: x402Status?.status === 200,
+  paymentRequiredVersion: artifact.paymentRequired?.x402Version ?? null,
+  scheme: acceptedChallenge?.scheme ?? null,
+  transactionPresent: typeof artifact.transactionBase64 === "string" && artifact.transactionBase64.length > 0,
+  signed: artifact.signed === true,
+  broadcast: artifact.broadcast === true,
+  valid: artifact.paymentRequired?.x402Version === 2
+    && acceptedChallenge?.scheme === "exact-magicblock"
+    && typeof artifact.transactionBase64 === "string"
+    && artifact.transactionBase64.length > 0
+    && artifact.signed === false
+    && artifact.broadcast === false
+    && paymentIdMatchesStatus
+    && challengeAgeMs !== null
+    && challengeAgeMs <= challengeMaxAgeMs
+    && x402Status?.status === 200,
+};
 const evidence = {
   checkedAt,
   merchantReady: delegation.merchantReady ?? null,
@@ -151,6 +180,7 @@ const evidence = {
     privacy_audit_verified: publicStatus.privacy_audit_verified ?? null,
     payment_bound_quote_required: publicStatus.payment_bound_quote_required ?? null,
     merchant_accounts_delegated: publicStatus.merchant_accounts_delegated ?? null,
+    payment_ingress_configured: publicStatus.payment_ingress_configured ?? null,
     privacy_checks: publicStatus.privacy_checks ?? null,
     activation_blockers: publicStatus.activation_blockers ?? publicStatus.blockers ?? null,
     commercial_fee_model: publicStatus.commercial_fee_model ?? null,
@@ -158,6 +188,7 @@ const evidence = {
     error: publicStatus.error ?? null,
   },
   x402Status,
+  x402Challenge,
   independentTeeRpc,
   settlementVisibility,
   delegation,
@@ -192,13 +223,20 @@ const evidence = {
       evidence: "A finalized TEE signature status does not itself prove payment-bound TDX execution or unlinkability, amount confidentiality, and timing privacy.",
     },
   },
-  releaseDecision: delegation.merchantReady === true && publicStatus.enabled === true ? "candidate" : "blocked",
+  releaseDecision: delegation.merchantReady === true
+    && publicStatus.enabled === true
+    && publicStatus.payment_ingress_configured === true
+    && publicStatus.merchant_accounts_delegated === true
+    && x402Challenge.valid === true
+    ? "candidate"
+    : "blocked",
   notes: [
     "Read-only evidence collection; no wallet signing or transaction broadcast was performed.",
     "A successful sigVerify=false simulation proves the fresh transaction is executable by the RPC; it does not prove owner authorization or settlement.",
     "A successful unsigned artifact response does not prove merchant delegation or x402 settlement.",
     "The x402 status is read-only provider evidence; a paid status is not by itself a privacy audit or merchant commission receipt.",
     "TEE signature status is recorded independently when the provider exposes a settlement signature; transaction detail remains provider-private.",
+    "A release candidate requires a fresh unsigned x402 v2 exact-magicblock challenge artifact whose payment id matches the read-only provider status; merchant readiness alone is not payment-path readiness.",
     "Public activation is enabled only while the live privacy gates and explicit production enablement remain true; TDX payment-bound attestation is reported separately and remains inconclusive unless verified.",
   ],
 };

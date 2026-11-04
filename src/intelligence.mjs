@@ -3,6 +3,7 @@ import { evmNetwork, executeEvmService, evmRead } from "./evm.mjs";
 import { mintEvidence, readRpc, simulateSolanaTransaction } from "./solana.mjs";
 import { runIntelInference } from "./intel.mjs";
 import { ibmProviderStatus, runWatsonxInference } from "./ibm.mjs";
+import { bedrockProviderStatus, runBedrockInference } from "./bedrock.mjs";
 import { marketData } from "./market.mjs";
 import { normalizeNetworkId } from "./network-capabilities.mjs";
 
@@ -228,6 +229,13 @@ export async function researchReport(config, input = {}) {
       inference = await runWatsonxInference(config, { facts: subject.facts, signals: anomaly.signals, network: subject.network });
     } catch (error) {
       inference = { ...inference, fallback: { provider: "ibm-watsonx", status: "unavailable", reason: error.message } };
+    }
+  }
+  if (inference.status !== "completed" && bedrockProviderStatus(config).status === "configured") {
+    try {
+      inference = await runBedrockInference(config, { facts: subject.facts, signals: anomaly.signals, network: subject.network });
+    } catch (error) {
+      inference = { ...inference, fallback: { provider: "amazon-bedrock", status: "unavailable", reason: "BEDROCK_UNAVAILABLE" } };
     }
   }
   return {

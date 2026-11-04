@@ -6,6 +6,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      production_approval:
+        description: "Type I_APPROVE_PRODUCTION_DEPLOY to authorize the production deployment"
+        required: true
+        type: string
 
 concurrency:
   group: agent-exchange-production
@@ -58,6 +63,17 @@ jobs:
           test -n "$AWS_REGION" || { echo "::error::AGENT_EXCHANGE_AWS_REGION is not configured."; exit 1; }
           test -n "$FUNCTION_NAME" || { echo "::error::AGENT_EXCHANGE_FUNCTION_NAME is not configured."; exit 1; }
           test -n "$PUBLIC_BASE_URL" || { echo "::error::AGENT_EXCHANGE_PUBLIC_BASE_URL is not configured."; exit 1; }
+
+      - name: Require explicit production approval for deployment
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PRODUCTION_APPROVAL: ${{ inputs.production_approval }}
+        run: |
+          set -euo pipefail
+          test "$PRODUCTION_APPROVAL" = "I_APPROVE_PRODUCTION_DEPLOY" || {
+            echo "::error::Exact production approval phrase was not supplied."
+            exit 1
+          }
 
       - name: Require successful CI and Agent Exchange checks for the same SHA
         env:
@@ -121,18 +137,8 @@ jobs:
             exit 0
           fi
 
-          if ! git rev-parse HEAD^ >/dev/null 2>&1; then
-            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if git diff --quiet HEAD^ HEAD --             .             .github/workflows/agent-exchange-deploy.yml; then
-            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
-            echo "No Agent Exchange runtime or deployment-workflow change; production deployment is skipped."
-          else
-            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
-            echo "Agent Exchange deployment-relevant change detected."
-          fi
+          echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          echo "Automatic workflow_run completed verification only; production deployment requires manual approval."
 
   deploy:
     name: Deploy production Lambda

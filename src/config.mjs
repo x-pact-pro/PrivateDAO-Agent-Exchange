@@ -192,6 +192,8 @@ export function getConfig(env = process.env) {
       questId: Number(env.MAGICBLOCK_QUESTLINE_QUEST_ID || 94),
       baseUrl: env.MAGICBLOCK_QUESTLINE_BASE_URL || "",
       bearerToken: env.MAGICBLOCK_QUESTLINE_API_KEY || "",
+      secretId: env.MAGICBLOCK_QUESTLINE_SECRET_ID || "",
+      requireSecretManager: bool(env.MAGICBLOCK_QUESTLINE_REQUIRE_SECRET_MANAGER),
       pushPath: env.MAGICBLOCK_QUESTLINE_PUSH_PATH || "/api/validators/run",
       pushEnabled: bool(env.MAGICBLOCK_QUESTLINE_PUSH_ENABLED),
     },
@@ -201,7 +203,7 @@ export function getConfig(env = process.env) {
 }
 
 export async function hydrateConfig(config, env = process.env) {
-  if (!env.AGENT_EXCHANGE_SOLANA_RPC_SECRET_ID && !config.alchemySecretId && !config.mongoSecretId && !config.ibmSecretId && !config.githubSecretId && !config.payoutSecretId && !config.privatePaySecretId && !config.alibabaMarketplaceSecretId && !env.AGENT_EXCHANGE_ADMIN_SECRET_ID) return config;
+  if (!env.AGENT_EXCHANGE_SOLANA_RPC_SECRET_ID && !config.alchemySecretId && !config.mongoSecretId && !config.ibmSecretId && !config.githubSecretId && !config.payoutSecretId && !config.privatePaySecretId && !config.alibabaMarketplaceSecretId && !config.questline.secretId && !env.AGENT_EXCHANGE_ADMIN_SECRET_ID) return config;
   const [{ SecretsManagerClient, GetSecretValueCommand }] = await Promise.all([
     import("@aws-sdk/client-secrets-manager"),
   ]);
@@ -273,6 +275,13 @@ export async function hydrateConfig(config, env = process.env) {
     [config.payoutSecretId, (values, raw) => { config.payoutSignerSecret = values.SOLANA_PAYOUT_PRIVATE_KEY || values.PAYOUT_SIGNER_PRIVATE_KEY || values.secretKey || values.privateKey || raw || ""; }],
     [config.privatePaySecretId, (values) => { if (values.PRIVATEPAY_FACILITATOR_API_KEY) config.privatePayFacilitatorApiKey = values.PRIVATEPAY_FACILITATOR_API_KEY; if (values.PRIVATEPAY_MERCHANT_ID) config.privatePayMerchantId = values.PRIVATEPAY_MERCHANT_ID; if (values.PRIVATEPAY_STEALTH_POOL_TOKEN) config.privatePayStealthPoolToken = values.PRIVATEPAY_STEALTH_POOL_TOKEN; }],
     [config.alibabaMarketplaceSecretId, (values) => { if (values.ALIBABA_MARKETPLACE_SPI_SECRET) config.alibabaMarketplaceSpiSecret = values.ALIBABA_MARKETPLACE_SPI_SECRET; }],
+    [config.questline.secretId, (values) => {
+      if (values.MAGICBLOCK_QUESTLINE_API_KEY || values.QUESTLINE_API_KEY) config.questline.bearerToken = values.MAGICBLOCK_QUESTLINE_API_KEY || values.QUESTLINE_API_KEY;
+      if (values.MAGICBLOCK_QUESTLINE_BASE_URL) config.questline.baseUrl = values.MAGICBLOCK_QUESTLINE_BASE_URL;
+      if (values.MAGICBLOCK_QUESTLINE_QUEST_ID) config.questline.questId = Number(values.MAGICBLOCK_QUESTLINE_QUEST_ID);
+      if (values.MAGICBLOCK_QUESTLINE_PUSH_PATH) config.questline.pushPath = values.MAGICBLOCK_QUESTLINE_PUSH_PATH;
+      if (values.MAGICBLOCK_QUESTLINE_PUSH_ENABLED != null) config.questline.pushEnabled = bool(values.MAGICBLOCK_QUESTLINE_PUSH_ENABLED);
+    }],
   ];
   for (const [secretId, apply] of optionalSecrets) {
     if (!secretId) continue;
