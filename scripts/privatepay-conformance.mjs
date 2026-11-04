@@ -33,16 +33,29 @@ const requestId = option("request-id", "");
 const expectedClientRefId = requestId ? clientRefId(requestId) : null;
 let rpcId = 0;
 async function rpc(method, params) {
-  const response = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(`${method} returned HTTP ${response.status}`);
-  if (payload.error) throw new Error(`${method} RPC error ${payload.error.code}: ${payload.error.message}`);
-  return payload.result;
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(`${method} returned HTTP ${response.status}`);
+    if (payload.error) throw new Error(`${method} RPC error ${payload.error.code}: ${payload.error.message}`);
+    return payload.result;
+  } catch (error) {
+    if (timedOut) throw new Error(`${method} RPC request timed out after ${timeoutMs}ms`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 let identityPayload;

@@ -3,10 +3,16 @@ import assert from "node:assert/strict";
 import nacl from "tweetnacl";
 import { PublicKey } from "@solana/web3.js";
 import { MemoryStore } from "../src/storage.mjs";
-import { createQuestlineClient, participationMessage, validateAndPushQuest, validateQuestEligibility, verifyWalletSignature } from "../src/questline.mjs";
+import { createQuestlineClient, participationMessage, questlineConfig, validateAndPushQuest, validateQuestEligibility, verifyWalletSignature } from "../src/questline.mjs";
 
 const wallet = new PublicKey(nacl.sign.keyPair.fromSeed(Uint8Array.from({ length: 32 }, (_, i) => i + 1)).publicKey).toBase58();
 const base = { questId: 94, baseUrl: "https://quests.magicblock.app", bearerToken: "test-token", pushPath: "/api/validators/run", pushEnabled: true };
+
+test("Questline supports a Secrets Manager reference without requiring a plaintext key", () => {
+  const config = questlineConfig({ MAGICBLOCK_QUESTLINE_SECRET_ID: "pdao/agent-exchange/questline" });
+  assert.equal(config.secretId, "pdao/agent-exchange/questline");
+  assert.equal(config.bearerToken, "");
+});
 
 function records() {
   const storage = new MemoryStore();

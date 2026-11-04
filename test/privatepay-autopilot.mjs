@@ -61,3 +61,10 @@ test("PrivatePAY Autopilot requires an exact network, asset, and recipient allow
   assert.throws(() => assertAutopilotTargetAllowed(policy, { network: policy.allowed_networks[0], asset: "So11111111111111111111111111111111111111112", payTo: policy.allowed_pay_to[0] }), /asset is not allowed/);
   assert.throws(() => assertAutopilotTargetAllowed(policy, { network: policy.allowed_networks[0], asset: policy.allowed_assets[0], payTo: "11111111111111111111111111111112" }), /recipient is not allowed/);
 });
+
+test("PrivatePAY Autopilot policy cancellation requires an owner authorization path", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/privatepay-autopilot.mjs", import.meta.url), "utf8"));
+  assert.match(source, /export async function revokePrivatePayAutopilotPolicy/);
+  assert.match(source, /verifySignedMessage\(policy\.owner, message, input\.owner_signature, "owner_signature"\)/);
+  assert.match(source, /status: "revoked"/);
+});

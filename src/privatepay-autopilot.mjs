@@ -263,6 +263,8 @@ export async function validatePrivatePayAutopilotOperation(config, input = {}) {
 
 export async function completePrivatePayAutopilotOperation(config, policyId, operationId) {
   const { policies, operations } = await collections(config);
+  const policyState = await policies.findOne({ id: policyId, kind: "privatepay_autopilot_policy" }, { projection: { status: 1 } });
+  if (!policyState || policyState.status !== "active") return { completed: false, reason: "policy_inactive" };
   const operation = await operations.findOne({ id: operationId, policy_id: policyId, status: "reserved" });
   if (!operation) return { completed: false, reason: "operation_not_reserved" };
   // The operation was freshness-checked before x402 verification. Once the
@@ -278,6 +280,42 @@ export async function completePrivatePayAutopilotOperation(config, policyId, ope
   }
   await operations.updateOne({ id: operationId, status: "completing" }, { $set: { status: "completed", completed_at: now, updated_at: now } });
   return { completed: true };
+}
+
+export async function revokePrivatePayAutopilotPolicy(config, input = {}) {
+  const { policies, operations } = await collections(config);
+  const policyId = String(input.policy_id || "").trim();
+  const policy = await policies.findOne({ id: policyId, kind: "privatepay_autopilot_policy" });
+  if (!policy) fail("autopilot policy was not found", "PRIVATEPAY_AUTOPILOT_POLICY_NOT_FOUND", 404);
+  if (policy.status === "revoked") return { revoked: false, reason: "already_revoked", policy_id: policyId };
+  if (!["active", "expired"].includes(policy.status)) return { revoked: false, reason: "revocation_in_progress", policy_id: policyId };
+
+  const message = canonicalMessage("revoke", { policy_id: policyId });
+  verifySignedMessage(policy.owner, message, input.owner_signature, "owner_signature");
+  const now = new Date().toISOString();
+  const claimed = await policies.findOneAndUpdate(
+    { id: policyId, status: { $in: ["active", "expired"] } },
+    { $set: { status: "revoking", updated_at: now } },
+  );
+  if (!claimed) return { revoked: false, reason: "revocation_in_progress", policy_id: policyId };
+
+  const reserved = await operations.find({ policy_id: policyId, status: "reserved" }).toArray();
+  const reservedBaseUnits = reserved.reduce((total, operation) => total + BigInt(operation.amount_base_units || "0"), 0n);
+  const cancelled = reserved.length
+    ? await operations.updateMany(
+      { policy_id: policyId, status: "reserved" },
+      { $set: { status: "cancelled", cancelled_at: now, cancellation_reason: "policy_revoked", updated_at: now } },
+    )
+    : { modifiedCount: 0 };
+  const finalized = await policies.updateOne(
+    { id: policyId, status: "revoking" },
+    {
+      $set: { status: "revoked", revoked_at: now, updated_at: now },
+      $inc: { reserved_base_units: -Number(reservedBaseUnits), reserved_operations: -cancelled.modifiedCount },
+    },
+  );
+  if (finalized.modifiedCount !== 1) return { revoked: false, reason: "revocation_finalize_pending", policy_id: policyId };
+  return { revoked: true, policy_id: policyId, cancelled_operations: cancelled.modifiedCount, released_base_units: reservedBaseUnits.toString(), message };
 }
 
 export async function cancelPrivatePayAutopilotOperation(config, input = {}) {

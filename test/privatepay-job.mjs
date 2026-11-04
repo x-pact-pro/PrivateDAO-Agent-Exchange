@@ -93,7 +93,7 @@ test("PrivatePAY job lifecycle verifies, settles, executes once, and redacts pub
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: checkoutRequest.amount,
-        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        payTo: "So11111111111111111111111111111111111111112",
         maxTimeoutSeconds: 60,
         extra: { paymentId: "b".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -221,6 +221,7 @@ test("PrivatePAY jobs persist a pending checkout and fetch its challenge on retr
   let checkoutCreates = 0;
   let challengeRequests = 0;
   const checkoutPayment = "d".repeat(64);
+  let checkoutRequest;
   globalThis.fetch = async (url, init = {}) => {
     const target = String(url);
     const payload = JSON.parse(init.body || "{}");
@@ -228,6 +229,7 @@ test("PrivatePAY jobs persist a pending checkout and fetch its challenge on retr
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: null } }), { status: 200, headers: { "content-type": "application/json" } });
     if (target.endsWith("/v1/payments")) {
       checkoutCreates += 1;
+      checkoutRequest = payload;
       return new Response(JSON.stringify({ id: checkoutPayment, status: "pending" }), { status: 202, headers: { "content-type": "application/json" } });
     }
     if (target.endsWith(`/v1/x402/payments/${checkoutPayment}/pay`)) {
@@ -237,11 +239,11 @@ test("PrivatePAY jobs persist a pending checkout and fetch its challenge on retr
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "550000",
-        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        payTo: "So11111111111111111111111111111111111111112",
         maxTimeoutSeconds: 60,
         extra: { paymentId: checkoutPayment, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
-      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "api://job-pending" }, accepts: [accepted] }) } });
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource }, accepts: [accepted] }) } });
     }
     throw new Error(`unexpected fixture request: ${target}`);
   };
@@ -288,7 +290,7 @@ test("PrivatePAY job rejects a provider challenge whose amount differs from the 
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: String(Number(checkoutRequest.amount) + 1),
-        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        payTo: "So11111111111111111111111111111111111111112",
         maxTimeoutSeconds: 60,
         extra: { paymentId: "e".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -314,6 +316,106 @@ test("PrivatePAY job rejects a provider challenge whose amount differs from the 
   }
 });
 
+test("PrivatePAY job rejects a provider challenge whose recipient differs from the local ingress", async () => {
+  const originalFetch = globalThis.fetch;
+  let verifyCalls = 0;
+  let settleCalls = 0;
+  let checkoutRequest;
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.endsWith("/v1/payments")) {
+      checkoutRequest = JSON.parse(init.body || "{}");
+      return new Response(JSON.stringify({ id: "f".repeat(64), status: "created" }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (target.includes("/v1/x402/payments/") && target.endsWith("/pay")) {
+      const accepted = {
+        scheme: "exact-magicblock",
+        network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        asset: "EPjFWdd5AufSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        amount: String(checkoutRequest.amount),
+        payTo: "11111111111111111111111111111111",
+        maxTimeoutSeconds: 60,
+        extra: { paymentId: "f".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+      };
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource, description: "fixture" }, accepts: [accepted] }) } });
+    }
+    if (target.endsWith("/verify")) {
+      verifyCalls += 1;
+      return new Response(JSON.stringify({ isValid: true }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (target.endsWith("/settle")) {
+      settleCalls += 1;
+      return new Response(JSON.stringify({ success: true, transaction: "should-not-settle" }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    const payload = JSON.parse(init.body || "{}");
+    if (payload.method === "getAccountInfo")
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: null } }), { status: 200, headers: { "content-type": "application/json" } });
+    throw new Error(`unexpected fixture request: ${target}`);
+  };
+  try {
+    resetForTests();
+    const response = await request("/api/privatepay/x402", "POST", {
+      payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6",
+      resource: "https://agents.example/api/recipient-mismatch",
+      provider_id: "provider-1",
+      amount_base_units: "1000",
+    });
+    assert.equal(response.statusCode, 502);
+    assert.match(response.body, /PRIVATEPAY_CHECKOUT_BINDING_MISMATCH/);
+    assert.equal(verifyCalls, 0);
+    assert.equal(settleCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("PrivatePAY job rejects a provider challenge for a different resource", async () => {
+  const originalFetch = globalThis.fetch;
+  let verifyCalls = 0;
+  let checkoutRequest;
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.endsWith("/v1/payments")) {
+      checkoutRequest = JSON.parse(init.body || "{}");
+      return new Response(JSON.stringify({ id: "0".repeat(64), status: "created" }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (target.includes("/v1/x402/payments/") && target.endsWith("/pay")) {
+      const accepted = {
+        scheme: "exact-magicblock",
+        network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        asset: "EPjFWdd5AufSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        amount: String(checkoutRequest.amount),
+        payTo: "So11111111111111111111111111111111111111112",
+        maxTimeoutSeconds: 60,
+        extra: { paymentId: "0".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+      };
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "https://agents.example/api/other-resource" }, accepts: [accepted] }) } });
+    }
+    if (target.endsWith("/verify")) {
+      verifyCalls += 1;
+      return new Response(JSON.stringify({ isValid: true }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    const payload = JSON.parse(init.body || "{}");
+    if (payload.method === "getAccountInfo")
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: null } }), { status: 200, headers: { "content-type": "application/json" } });
+    throw new Error(`unexpected fixture request: ${target}`);
+  };
+  try {
+    resetForTests();
+    const response = await request("/api/privatepay/x402", "POST", {
+      payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6",
+      resource: "https://agents.example/api/resource-binding",
+      provider_id: "provider-1",
+      amount_base_units: "1000",
+    });
+    assert.equal(response.statusCode, 502);
+    assert.match(response.body, /PRIVATEPAY_CHECKOUT_BINDING_MISMATCH/);
+    assert.equal(verifyCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("generic PrivatePAY x402 endpoint performs verify and settle with a redacted response", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
@@ -331,11 +433,11 @@ test("generic PrivatePAY x402 endpoint performs verify and settle with a redacte
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "1000",
-        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        payTo: "So11111111111111111111111111111111111111112",
         maxTimeoutSeconds: 60,
         extra: { paymentId: "a".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
-      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "api://generic" }, accepts: [accepted] }) } });
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource }, accepts: [accepted] }) } });
     }
     if (target.endsWith("/verify")) {
       calls.push("verify");
@@ -388,10 +490,12 @@ test("generic PrivatePAY x402 resumes a pending checkout by payment id", async (
   const originalFetch = globalThis.fetch;
   let checkoutCreates = 0;
   let checkoutPayment;
+  let checkoutRequest;
   globalThis.fetch = async (url, init = {}) => {
     const target = String(url);
     if (target.endsWith("/v1/payments")) {
       checkoutCreates += 1;
+      checkoutRequest = JSON.parse(init.body || "{}");
       checkoutPayment = "c".repeat(64);
       return new Response(JSON.stringify({ id: checkoutPayment, status: "pending" }), { status: 202, headers: { "content-type": "application/json", "retry-after": "1" } });
     }
@@ -401,11 +505,11 @@ test("generic PrivatePAY x402 resumes a pending checkout by payment id", async (
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "1000",
-        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        payTo: "So11111111111111111111111111111111111111112",
         maxTimeoutSeconds: 60,
         extra: { paymentId: checkoutPayment, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
-      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "api://resume" }, accepts: [accepted] }) } });
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource }, accepts: [accepted] }) } });
     }
     throw new Error(`unexpected fixture request: ${target}`);
   };
@@ -433,11 +537,13 @@ test("generic PrivatePAY x402 resumes a pending checkout by payment id", async (
 test("generic PrivatePAY x402 isolates checkout bindings per payer", async () => {
   const originalFetch = globalThis.fetch;
   let checkoutCreates = 0;
+  let checkoutRequest;
   globalThis.fetch = async (url, init = {}) => {
     const target = String(url);
     const payload = JSON.parse(init.body || "{}");
     if (target.endsWith("/v1/payments")) {
       checkoutCreates += 1;
+      checkoutRequest = payload;
       const paymentId = ["f", "e"][checkoutCreates - 1].repeat(64);
       return new Response(JSON.stringify({ id: paymentId, status: "created" }), { status: 200, headers: { "content-type": "application/json" } });
     }
@@ -448,11 +554,11 @@ test("generic PrivatePAY x402 isolates checkout bindings per payer", async () =>
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "1000",
-        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        payTo: "So11111111111111111111111111111111111111112",
         maxTimeoutSeconds: 60,
         extra: { paymentId, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
-      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "api://per-payer" }, accepts: [accepted] }) } });
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource }, accepts: [accepted] }) } });
     }
     throw new Error(`unexpected fixture request: ${target}`);
   };

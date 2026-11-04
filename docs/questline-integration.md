@@ -19,7 +19,9 @@ The completion key is deterministic and persisted in `QuestlineCompletions`. A c
 
 The deployment environment must provide the variable names already present in the local `Quest.env` file:
 
-- `MAGICBLOCK_QUESTLINE_API_KEY`
+- `MAGICBLOCK_QUESTLINE_SECRET_ID` (recommended; Secrets Manager JSON key
+  `MAGICBLOCK_QUESTLINE_API_KEY` or `QUESTLINE_API_KEY`)
+- `MAGICBLOCK_QUESTLINE_API_KEY` (legacy fallback; do not use in production)
 - `MAGICBLOCK_QUESTLINE_BASE_URL`
 - `MAGICBLOCK_QUESTLINE_QUEST_ID`
 

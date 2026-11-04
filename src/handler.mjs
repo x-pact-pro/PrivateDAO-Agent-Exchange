@@ -30,6 +30,7 @@ import {
 } from "./intelligence.mjs";
 import { intelProviderStatus, runIntelInference } from "./intel.mjs";
 import { ibmProviderStatus, runWatsonxInference } from "./ibm.mjs";
+import { bedrockProviderStatus, runBedrockInference } from "./bedrock.mjs";
 import { githubProviderStatus, repositoryEvidence } from "./github.mjs";
 import { applyGithubMarketplacePurchase, githubAppConfigured, githubGetInstallation, githubInstallationRepositories, githubRepositoryContext, mergeGithubInstallationRepositories, publicGithubInstallationRecord, verifyGithubWebhook } from "./github-app.mjs";
 import { mongoProviderStatus, persistEvidence } from "./mongodb.mjs";
@@ -42,7 +43,7 @@ import { calculatePdaoSellerListingBenefit, issuePdaoChallenge, publicPdaoBenefi
 import { runScheduledSellerSettlements } from "./settlement.mjs";
 import { HandshakeReplayCache, readSealReputation, sealkeeperFailure } from "./sealkeeper.mjs";
 import { buildPrivatePayPdaoFeeTransaction, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayRequirements, decodePrivatePayRequiredHeader, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayRail, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge, verifyPrivatePayMainnetSettlement, verifyPrivatePayPdaoFee, PRIVATEPAY_SERVICE_ID } from "./privatepay.mjs";
-import { authorizePrivatePayAutopilotOperation, cancelPrivatePayAutopilotOperation, completePrivatePayAutopilotOperation, createPrivatePayAutopilotChallenge, createPrivatePayAutopilotOperationChallenge, createPrivatePayAutopilotPolicy, privatePayAutopilotStatus, validatePrivatePayAutopilotOperation } from "./privatepay-autopilot.mjs";
+import { authorizePrivatePayAutopilotOperation, cancelPrivatePayAutopilotOperation, completePrivatePayAutopilotOperation, createPrivatePayAutopilotChallenge, createPrivatePayAutopilotOperationChallenge, createPrivatePayAutopilotPolicy, privatePayAutopilotStatus, revokePrivatePayAutopilotPolicy, validatePrivatePayAutopilotOperation } from "./privatepay-autopilot.mjs";
 import { handleAlibabaSpi } from "./alibaba-marketplace.mjs";
 import { encodePaymentResponseHeader } from "@x402/core/http";
 import { createQuestlineClient, participationMessage, validateAndPushQuest, assertSolanaWallet, verifyWalletSignature } from "./questline.mjs";
@@ -996,7 +997,7 @@ function openapi() {
     "/api/privatepay/autopilot/policies": { post: { operationId: "privatePayAutopilotPolicy", summary: "Create a bounded Autopilot policy", description: "Create a delegated agent-session policy with maximum amount, budget, operation count, TTL, service allowlist, network allowlist, token-mint allowlist, and exact payment-recipient allowlist. Neither the main wallet key nor the agent session private key is stored.", requestBody: { required: true, content: { "application/json": { schema: autopilotPolicyInput } } }, responses: { "201": { description: "Policy created" }, "503": { description: "Autopilot not explicitly activated" } } } },
     "/api/privatepay/autopilot/operation-challenge": { post: { operationId: "privatePayAutopilotOperationChallenge", summary: "Authorize one Autopilot operation", description: "Reserve one operation against an active policy after checking its service, amount, expiry, network, asset, exact payment recipient, and remaining count.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id", "resource", "provider_id", "amount_base_units", "network", "asset", "pay_to"], properties: { policy_id: { type: "string" }, resource: { type: "string", format: "uri" }, provider_id: { type: "string" }, amount_base_units: { type: "string", pattern: "^[0-9]+$" }, network: { type: "string" }, asset: { type: "string" }, pay_to: { type: "string" } }, additionalProperties: false } } } }, responses: { "200": { description: "Operation challenge" }, "403": { description: "Target or policy rejected" }, "409": { description: "Policy limit rejected" } } } },
     "/api/privatepay/autopilot/operations": { post: { operationId: "privatePayAutopilotOperation", summary: "Authorize a bounded operation", description: "Accept a session signature for one previously challenged operation and return the exact x402 next-request context.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id", "operation_id", "session_signature"], properties: { policy_id: { type: "string" }, operation_id: { type: "string" }, session_signature: { type: "string" } }, additionalProperties: false } } } }, responses: { "201": { description: "Operation authorized" }, "409": { description: "Operation rejected or already consumed" } } } },
-    "/api/privatepay/autopilot/cancel": { post: { operationId: "privatePayAutopilotCancel", summary: "Cancel an Autopilot policy or operation", description: "Stop future automated operations and release unused reservations. This does not reverse a completed settlement.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id"], properties: { policy_id: { type: "string" }, operation_id: { type: "string" } }, additionalProperties: false } } } }, responses: { "200": { description: "Cancellation recorded" } } } },
+    "/api/privatepay/autopilot/cancel": { post: { operationId: "privatePayAutopilotCancel", summary: "Cancel an Autopilot policy or operation", description: "Stop future automated operations and release unused reservations. Policy cancellation requires an owner signature. This does not reverse a completed settlement.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["policy_id"], properties: { policy_id: { type: "string" }, operation_id: { type: "string" }, owner_signature: { type: "string", description: "Required when cancelling the whole policy" }, session_signature: { type: "string", description: "Required when cancelling one reserved operation" } }, additionalProperties: false } } } }, responses: { "200": { description: "Cancellation recorded" }, "403": { description: "Owner or session authorization rejected" } } } },
     "/api/privatepay/x402": { post: { operationId: "privatePayX402", summary: "Pay a PrivatePAY x402 request", description: "Return HTTP 402 requirements when payment is absent, or verify and settle a finalized x402 v2 payment through the reviewed MagicBlock private facilitator. The route is fail-closed and requires the PDAO private-settlement fee rule.", parameters: [{ name: "PAYMENT-SIGNATURE", in: "header", required: false, schema: { type: "string" } }], requestBody: { required: true, content: { "application/json": { schema: privatePayRequirementsInput } } }, responses: { "200": { description: "Private payment settled" }, "402": { description: "Fresh x402 payment requirements" }, "503": { description: "Settlement pending or private rail unavailable" } } } },
     "/api/privatepay/x402/requirements": { post: { operationId: "privatePayRequirements", summary: "Create a PrivatePAY challenge", description: "Create exact x402 v2 USDC payment requirements for the Solana Mainnet private settlement path. This never signs, broadcasts, or moves funds.", requestBody: { required: true, content: { "application/json": { schema: privatePayRequirementsInput } } }, responses: { "200": { description: "Exact payment requirements" }, "403": { description: "PDAO entry requirement rejected" }, "503": { description: "Private rail unavailable" } } } },
     "/api/privatepay/x402/pdao-fee/transaction": { post: { operationId: "privatePayPdaoFeeTransaction", summary: "Build the PDAO fee transaction", description: "Build an unsigned base-layer PDAO fee transaction. The wallet signs and submits it locally; PrivateDAO never receives a private key.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["payer", "request_id", "amount_base_units"], properties: { payer: { type: "string" }, request_id: { type: "string", pattern: "^pp_[a-f0-9]{32}$" }, amount_base_units: { type: "string", pattern: "^[0-9]+$" }, pdao_fee_base_units: { type: "string", pattern: "^[0-9]+$" } }, additionalProperties: false } } } }, responses: { "200": { description: "Unsigned transaction" } } } },
@@ -1580,7 +1581,7 @@ function validateServiceInput(serviceId, input = {}) {
     if (input.handshake && (!input.nonce || !input.aud)) throw new Error("nonce and aud are required with a handshake");
     return;
   }
-  if (serviceId === "intelligence.synthesize" && !config.intelInferenceUrl && ibmProviderStatus(config).status !== "configured") {
+  if (serviceId === "intelligence.synthesize" && !config.intelInferenceUrl && ibmProviderStatus(config).status !== "configured" && bedrockProviderStatus(config).status !== "configured") {
     throw Object.assign(new Error("No inference provider is configured"), { statusCode: 503 });
   }
   if (serviceId === "github.repository") {
@@ -1774,10 +1775,11 @@ async function requestPrivatePay(){
   if(!privatePayWallet||!privatePayPayer)return connectPrivatePayWallet();
   privatePayButton.disabled=true;
   try{
+    const privatePayAttempt=crypto.randomUUID();
     const amountBaseUnits=privatePayUnits();
     privatePayStatus.textContent='Requesting an exact MagicBlock x402 challenge…';
     const resource=location.origin+'/services/privatepay-x402';
-    const first=await fetch('/api/privatepay/x402',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({payer:privatePayPayer,resource,provider_id:'privatepay.x402',amount_base_units:amountBaseUnits,pdao_optional:true})});
+    const first=await fetch('/api/privatepay/x402',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({payer:privatePayPayer,resource,provider_id:'privatepay.x402',amount_base_units:amountBaseUnits,nonce:privatePayAttempt,external_reference:'privatepay-ui-'+privatePayAttempt,pdao_optional:true})});
     const firstBody=await first.json().catch(()=>({}));
     const requiredHeader=first.headers.get('PAYMENT-REQUIRED');
     if(first.status!==402||!requiredHeader){
@@ -1794,7 +1796,7 @@ async function requestPrivatePay(){
     const payload={x402Version:2,resource:required.resource,accepted,payload:{paymentId:accepted.extra.paymentId,transaction}};
     const paymentSignature=privatePayEncode(new TextEncoder().encode(JSON.stringify(payload)));
     privatePayStatus.textContent='Signed locally. Waiting for the private settlement receipt…';
-    const second=await fetch('/api/privatepay/x402',{method:'POST',headers:{'content-type':'application/json','payment-signature':paymentSignature},body:JSON.stringify({payer:privatePayPayer,resource,provider_id:'privatepay.x402',amount_base_units:amountBaseUnits,pdao_optional:true})});
+    const second=await fetch('/api/privatepay/x402',{method:'POST',headers:{'content-type':'application/json','payment-signature':paymentSignature},body:JSON.stringify({payer:privatePayPayer,resource,provider_id:'privatepay.x402',amount_base_units:amountBaseUnits,nonce:privatePayAttempt,external_reference:'privatepay-ui-'+privatePayAttempt,pdao_optional:true})});
     const secondBody=await second.json().catch(()=>({}));
     privatePayStatus.textContent=JSON.stringify({status:second.status,payment_id:accepted.extra.paymentId,response:secondBody,payment_response:second.headers.get('PAYMENT-RESPONSE')||null},null,2);
   }catch(error){privatePayStatus.textContent='PRIVATE PAYMENT ERROR: '+(error.message||String(error));}
@@ -3688,6 +3690,13 @@ export async function executeService(id, input) {
         });
       } catch (error) {
         inference = { ...inference, fallback: { provider: "ibm-watsonx", status: "unavailable", reason: error.message } };
+      }
+    }
+    if (inference.status !== "completed" && bedrockProviderStatus(config).status === "configured") {
+      try {
+        inference = await runBedrockInference(config, { evidence: input?.evidence || input, requested_output: input?.requested_output || "structured synthesis" });
+      } catch (error) {
+        inference = { ...inference, fallback: { provider: "amazon-bedrock", status: "unavailable", reason: "BEDROCK_UNAVAILABLE" } };
       }
     }
     return {
@@ -5690,7 +5699,9 @@ async function handle(e) {
   if (method === "POST" && path === "/api/privatepay/autopilot/operations")
     return json(await authorizePrivatePayAutopilotOperation(config, body), 201);
   if (method === "POST" && path === "/api/privatepay/autopilot/cancel")
-    return json(await cancelPrivatePayAutopilotOperation(config, body));
+    return json(body.operation_id
+      ? await cancelPrivatePayAutopilotOperation(config, body)
+      : await revokePrivatePayAutopilotPolicy(config, body));
   if (method === "POST" && path === "/api/privatepay/x402") {
     const x402Input = body.autopilot_operation_id && !body.nonce ? { ...body, nonce: body.autopilot_operation_id } : body;
     const liveStatus = await privatePayReadiness();
@@ -5727,7 +5738,13 @@ async function handle(e) {
       && record.request_id === checkoutBinding.request_id
       && record.pdao_selected === checkoutBinding.pdao_selected
       && record.pdao_fee_base_units === checkoutBinding.pdao_fee_base_units;
-    const requestKey = `privatepay_checkout_request_${digest({ payer: checkoutBinding.payer, request_id: checkoutBinding.request_id }).slice(0, 32)}`;
+    const checkoutIdentity = {
+      payer: checkoutBinding.payer,
+      request_id: checkoutBinding.request_id,
+      pdao_selected: checkoutBinding.pdao_selected,
+      pdao_fee_base_units: checkoutBinding.pdao_fee_base_units,
+    };
+    const requestKey = `privatepay_checkout_request_${digest(checkoutIdentity).slice(0, 32)}`;
     const checkoutExpired = (record) => {
       const expiry = record?.checkout_expires_at || record?.expires_at;
       return Boolean(expiry && Date.parse(expiry) <= Date.now());
@@ -5754,7 +5771,7 @@ async function handle(e) {
       // resume the same checkout instead of creating a second charge.
       const existingPaymentId = suppliedPaymentId || (reusableCheckout(requestRecord) ? requestRecord.payment_id : "");
       const externalReference = String(x402Input.external_reference || x402Input.externalReference || "").trim()
-        || `privatepay-x402-${digest({ payer: checkoutBinding.payer, request_id: requirements.request_id }).slice(0, 32)}`;
+        || `privatepay-x402-${digest(checkoutIdentity).slice(0, 32)}`;
       let checkout;
       let storedBinding;
       if (existingPaymentId) {
@@ -5799,10 +5816,12 @@ async function handle(e) {
       const providerRequirements = decodePrivatePayRequiredHeader(challenge.payment_required_header);
       const providerAccepts = providerRequirements.accepts[0];
       const localAccepts = requirements.requirements.accepts[0];
-      if (providerAccepts?.extra?.paymentId !== checkout.payment_id
+      if (providerRequirements.resource?.url !== requirements.requirements.resource?.url
+        || providerAccepts?.extra?.paymentId !== checkout.payment_id
         || providerAccepts?.scheme !== localAccepts.scheme
         || providerAccepts?.amount !== localAccepts.amount
         || providerAccepts?.asset !== localAccepts.asset
+        || providerAccepts?.payTo !== localAccepts.payTo
         || providerAccepts?.network !== localAccepts.network
         || providerAccepts?.extra?.cluster !== localAccepts.extra?.cluster
         || providerAccepts?.extra?.settlement !== localAccepts.extra?.settlement)

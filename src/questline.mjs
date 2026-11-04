@@ -15,6 +15,7 @@ export function questlineConfig(env = process.env) {
     questId: Number.isInteger(questId) && questId > 0 ? questId : QUESTLINE_QUEST_ID,
     baseUrl: asText(env.MAGICBLOCK_QUESTLINE_BASE_URL).replace(/\/$/, ""),
     bearerToken: asText(env.MAGICBLOCK_QUESTLINE_API_KEY),
+    secretId: asText(env.MAGICBLOCK_QUESTLINE_SECRET_ID),
     pushPath: asText(env.MAGICBLOCK_QUESTLINE_PUSH_PATH) || QUESTLINE_PUSH_PATH,
     pushEnabled: env.MAGICBLOCK_QUESTLINE_PUSH_ENABLED === "true",
   };
