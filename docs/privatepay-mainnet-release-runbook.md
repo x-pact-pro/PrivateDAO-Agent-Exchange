@@ -2,18 +2,46 @@
 
 ## Current boundary
 
-PrivatePAY is deployed on the production Agent Exchange surface but remains
-fail-closed until both required MagicBlock accounts are delegated. The
+PrivatePAY is deployed on the production Agent Exchange surface. The
 production merchant account is
 `2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL` and the settlement asset is
 native Solana USDC on `mainnet-private`.
 
-The current production status check confirms that the merchant account is
-delegated to `MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo`, while the separate
-x402 payment-ingress account is not delegated. The public status therefore
-returns `not_ready`, `enabled=false`, and `operational=false`; challenge
-creation returns `503 PRIVATEPAY_NOT_READY` without calling the facilitator.
-This is intentional until the payment-ingress owner completes delegation.
+The current production status check confirms that both the merchant account and
+the separate x402 payment-ingress account are delegated to the TEE validator
+`MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo`. The public status reports
+`enabled=true` and `operational=true`, with no activation blockers. This is
+readiness evidence only; it does not prove a funded checkout settlement.
+
+## Mainnet validator selection
+
+The reviewed private rail uses the TEE validator and its RPC endpoint:
+
+```text
+RPC:       https://mainnet-tee.magicblock.app
+Validator: MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo
+Cluster:   mainnet-private
+```
+
+The following public ER validators are supported for development or explicit
+regional deployments, but must not be substituted for the reviewed TEE
+validator in the PrivatePAY mainnet-private delegation:
+
+```text
+Asia:          MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57
+EU:            MEUGGrYPxKk17hCr7wpT6s8dtNokZj5U2L57vjYMS8e
+US:            MUS3hc9TC4cGC12vHNoYcCGzJG1txjgQLZWVoeNHNd
+Asia Tokyo:    MSHuBweMkNp4yPLDkPLA8bLRHbDmURWjYzsxrcBjix8
+South America: MSARyz2yVTkqiYQWWgaEtUKug7oCF7PphE9GjEYHtDh
+```
+
+The crank preflight defaults to the TEE validator and accepts an explicit
+`PRIVATEPAY_MAINNET_VALIDATOR` only for a separately reviewed deployment.
+
+The PrivatePAY SPL transfer, deposit, and withdrawal builders pass the selected
+validator explicitly. The reviewed default is the TEE validator above; the
+x402 payment-link/checkout contract remains separate and does not accept a
+validator field.
 
 The release decision remains `candidate`, not an unconditional privacy claim:
 the collector marks payment-bound TDX attestation as `INCONCLUSIVE`. This

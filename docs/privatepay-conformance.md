@@ -157,6 +157,29 @@ x402 conformance evidence is reviewed and explicit production activation is
 approved. The matching MCP tool is `privatepay_checkout` with the same
 `create` and `challenge` phases.
 
+Buyer payment links use the same route with `phase: "buyer"`. The caller must
+send the official provider `Idempotency-Key` as an HTTP header; it is never
+accepted in the request body, returned in the response, or written to logs:
+
+```http
+POST /api/privatepay/x402/checkout
+Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+Content-Type: application/json
+
+{
+  "phase": "buyer",
+  "merchant_id": "<merchant-solana-address>",
+  "link_id": "<64-lowercase-hex-link-id>",
+  "payer": "<payer-solana-address>"
+}
+```
+
+The adapter forwards the payer body to
+`POST /v1/payment-links/{merchantId}/{linkId}/checkouts` and preserves HTTP
+200/202 as `paid`/`pending`. A caller must retain the same UUIDv4 locally to
+recover a pending checkout without creating another charge. This path remains
+activation-gated and does not sign or broadcast a wallet transaction.
+
 The lower-level transfer builder uses MagicBlock's `mainnet-private` cluster
 for every MagicBlock private rail request, even when the application setting
 is the generic `mainnet` or `mainnet-beta` alias. This prevents a private

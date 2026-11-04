@@ -42,7 +42,7 @@ import { publicMarketplacePackaging, SAAS_MODULES, ENTERPRISE_SUITE } from "./sa
 import { calculatePdaoSellerListingBenefit, issuePdaoChallenge, publicPdaoBenefitPolicy, pdaoPromotionStatus, consumePdaoBenefit, runPdaoHolderBalanceSnapshots, verifyPdaoHolderAccess, PDAO_SELLER_SERVICE_ID, PDAO_TOKEN_MINT, PDAO_DEVELOPER_ALLOCATION, PDAO_DEVELOPER_LOCK_UNTIL, PDAO_DEVELOPER_LOCK_CONTRACT } from "./pdao-entitlement.mjs";
 import { runScheduledSellerSettlements } from "./settlement.mjs";
 import { HandshakeReplayCache, readSealReputation, sealkeeperFailure } from "./sealkeeper.mjs";
-import { buildPrivatePayPdaoFeeTransaction, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayRequirements, decodePrivatePayRequiredHeader, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayRail, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge, verifyPrivatePayMainnetSettlement, verifyPrivatePayPdaoFee, PRIVATEPAY_SERVICE_ID } from "./privatepay.mjs";
+import { buildPrivatePayPdaoFeeTransaction, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayPaymentLinkCheckout, createPrivatePayRequirements, decodePrivatePayRequiredHeader, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayRail, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge, verifyPrivatePayMainnetSettlement, verifyPrivatePayPdaoFee, PRIVATEPAY_SERVICE_ID } from "./privatepay.mjs";
 import { authorizePrivatePayAutopilotOperation, cancelPrivatePayAutopilotOperation, completePrivatePayAutopilotOperation, createPrivatePayAutopilotChallenge, createPrivatePayAutopilotOperationChallenge, createPrivatePayAutopilotPolicy, privatePayAutopilotStatus, revokePrivatePayAutopilotPolicy, validatePrivatePayAutopilotOperation } from "./privatepay-autopilot.mjs";
 import { handleAlibabaSpi } from "./alibaba-marketplace.mjs";
 import { encodePaymentResponseHeader } from "@x402/core/http";
@@ -1337,7 +1337,7 @@ function capabilityStatus(serviceId) {
 }
 function serviceExample(service) {
   if (service.id === PRIVATEPAY_SERVICE_ID) return {
-    resource: "https://agents.privatedao.org/api/privatepay/conformance",
+    resource: "https://agents.privatedao.org/services/privatepay-x402",
     provider_id: "privatepay.x402",
     amount_base_units: "500000",
     external_reference: "order_privatepay_demo_001",
@@ -1747,7 +1747,7 @@ function privatePayServicePage() {
     )
     .replace('border-top:1px solid rgba(255,255,255,.1);color:#9eb0ca;font-size:.78rem', 'border-top:1px solid rgba(255,255,255,.1);color:#9eb0ca;font-size:.78rem')
     .replace('..hero-rail', '.hero-rail');
-  const developerPanel = `<section style="margin-top:18px;padding:20px;border:1px solid #dbe5ef;border-radius:14px;background:#fff;color:#071a32" aria-labelledby="privatepay-api-title"><p style="margin:0 0 6px;color:#1769e0;font-size:.72rem;font-weight:850;letter-spacing:.12em;text-transform:uppercase">For developers</p><h2 id="privatepay-api-title" style="margin:0 0 8px">The real x402 request flow</h2><p style="margin:0;color:#52657c">The first request creates a quote and returns HTTP 402. It does not charge a wallet. The wallet signs the exact accepted transaction, then the client retries with <code>PAYMENT-SIGNATURE</code>.</p><pre style="margin:14px 0 0;padding:14px;overflow:auto;white-space:pre-wrap;background:#f5f9ff;border:1px solid #dbe5ef;border-radius:10px;font:12px/1.5 ui-monospace,monospace">${escapeHtml(`curl -X POST https://${config.domain}/api/privatepay/x402 \\\n  -H 'content-type: application/json' \\\n  -d '${JSON.stringify({ resource: "https://agents.privatedao.org/api/privatepay/conformance", provider_id: "privatepay.x402", amount_base_units: "500000", external_reference: "order_privatepay_demo_001", description: "PrivatePAY x402 service access" })}'\n\n# HTTP 402: PAYMENT-REQUIRED\n# Sign accepted.extra.transaction locally, then retry:\ncurl -X POST https://${config.domain}/api/privatepay/x402 \\\n  -H 'content-type: application/json' \\\n  -H 'PAYMENT-SIGNATURE: <base64-x402-v2-payload>' \\\n  -d '<same quote body>'\n\n# Successful response shape:\n{\n  "status": "paid",\n  "payment_id": "<64-hex-payment-id>",\n  "settlement": "ephemeral-rollup",\n  "receipt": {\n    "status": "VERIFIED",\n    "receipt_id": "<receipt-id>",\n    "evidence_hash": "<sha256>"\n  }\n}`)}</pre></section>`;
+  const developerPanel = `<section style="margin-top:18px;padding:20px;border:1px solid #dbe5ef;border-radius:14px;background:#fff;color:#071a32" aria-labelledby="privatepay-api-title"><p style="margin:0 0 6px;color:#1769e0;font-size:.72rem;font-weight:850;letter-spacing:.12em;text-transform:uppercase">For developers</p><h2 id="privatepay-api-title" style="margin:0 0 8px">The real x402 request flow</h2><p style="margin:0;color:#52657c">The first request creates a quote and returns HTTP 402. It does not charge a wallet. The wallet signs the exact accepted transaction, then the client retries with <code>PAYMENT-SIGNATURE</code>.</p><pre style="margin:14px 0 0;padding:14px;overflow:auto;white-space:pre-wrap;background:#f5f9ff;border:1px solid #dbe5ef;border-radius:10px;font:12px/1.5 ui-monospace,monospace">${escapeHtml(`curl -X POST https://${config.domain}/api/privatepay/x402 \\\n  -H 'content-type: application/json' \\\n  -d '${JSON.stringify({ resource: "https://agents.privatedao.org/services/privatepay-x402", provider_id: "privatepay.x402", amount_base_units: "500000", external_reference: "order_privatepay_demo_001", description: "PrivatePAY x402 service access" })}'\n\n# HTTP 402: PAYMENT-REQUIRED\n# Sign accepted.extra.transaction locally, then retry:\ncurl -X POST https://${config.domain}/api/privatepay/x402 \\\n  -H 'content-type: application/json' \\\n  -H 'PAYMENT-SIGNATURE: <base64-x402-v2-payload>' \\\n  -d '<same quote body>'\n\n# Successful response shape:\n{\n  "status": "paid",\n  "payment_id": "<64-hex-payment-id>",\n  "settlement": "ephemeral-rollup",\n  "receipt": {\n    "status": "VERIFIED",\n    "receipt_id": "<receipt-id>",\n    "evidence_hash": "<sha256>"\n  }\n}`)}</pre></section>`;
   let walletFlow = `<script>
 let privatePayButton=document.querySelector('#privatePayPay');
 const privatePayAmount=document.querySelector('#privatePayAmount');
@@ -3919,6 +3919,23 @@ function assertPrivatePayJobQuoteBinding(localRequirements, providerRequirements
   return providerRequirements;
 }
 
+function privatePayCheckoutMismatchFields(providerRequirements, localRequirements, expectedPaymentId) {
+  const provider = providerRequirements?.accepts?.[0];
+  const local = localRequirements?.accepts?.[0];
+  const checks = [
+    ["resource", providerRequirements?.resource?.url, localRequirements?.resource?.url],
+    ["payment_id", provider?.extra?.paymentId, expectedPaymentId],
+    ["scheme", provider?.scheme, local?.scheme],
+    ["amount", provider?.amount, local?.amount],
+    ["asset", provider?.asset, local?.asset],
+    ["payTo", provider?.payTo, local?.payTo],
+    ["network", provider?.network, local?.network],
+    ["cluster", provider?.extra?.cluster, local?.extra?.cluster],
+    ["settlement", provider?.extra?.settlement, local?.extra?.settlement],
+  ];
+  return checks.filter(([, providerValue, localValue]) => providerValue !== localValue).map(([field]) => field);
+}
+
 async function createPrivatePayJobChallenge({ jobId, serviceId, payer, amount_base_units, pdao_benefits = false }) {
   const resource = `https://${config.domain}/api/jobs/${jobId}/privatepay`;
   const liveStatus = await privatePayReadiness();
@@ -5233,6 +5250,12 @@ function requestHeaders(event) {
   return event.headers || {};
 }
 
+function requestHeader(event, name) {
+  const headers = requestHeaders(event);
+  const target = String(name || "").toLowerCase();
+  return Object.entries(headers).find(([key]) => String(key).toLowerCase() === target)?.[1] || "";
+}
+
 async function questlineRoute(path, method, body) {
   const match = path.match(/^\/api\/questline\/(\d+)\/(participation\/challenge|participation|complete)$/);
   if (method !== "POST" || !match) return null;
@@ -5814,18 +5837,13 @@ async function handle(e) {
       if (challenge.status === "pending")
         return json({ error: "payment_pending", payment_id: checkout.payment_id, status: "pending", retry_after_seconds: challenge.retry_after_seconds || 2 }, 202, { "retry-after": String(challenge.retry_after_seconds || 2) });
       const providerRequirements = decodePrivatePayRequiredHeader(challenge.payment_required_header);
-      const providerAccepts = providerRequirements.accepts[0];
-      const localAccepts = requirements.requirements.accepts[0];
-      if (providerRequirements.resource?.url !== requirements.requirements.resource?.url
-        || providerAccepts?.extra?.paymentId !== checkout.payment_id
-        || providerAccepts?.scheme !== localAccepts.scheme
-        || providerAccepts?.amount !== localAccepts.amount
-        || providerAccepts?.asset !== localAccepts.asset
-        || providerAccepts?.payTo !== localAccepts.payTo
-        || providerAccepts?.network !== localAccepts.network
-        || providerAccepts?.extra?.cluster !== localAccepts.extra?.cluster
-        || providerAccepts?.extra?.settlement !== localAccepts.extra?.settlement)
-        throw Object.assign(new Error("MagicBlock returned a challenge for a different checkout"), { statusCode: 502, code: "PRIVATEPAY_CHECKOUT_BINDING_MISMATCH" });
+      const mismatchFields = privatePayCheckoutMismatchFields(providerRequirements, requirements.requirements, checkout.payment_id);
+      if (mismatchFields.length)
+        throw Object.assign(new Error("MagicBlock returned a challenge for a different checkout"), {
+          statusCode: 502,
+          code: "PRIVATEPAY_CHECKOUT_BINDING_MISMATCH",
+          diagnostic_fields: mismatchFields,
+        });
       await checkoutStore.put("Payments", requestKey, { ...nextBinding, state: "payment_required", updated_at: now() });
       await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, { ...nextBinding, state: "payment_required", updated_at: now() });
       return json({
@@ -5885,6 +5903,8 @@ async function handle(e) {
     return json(await buildPrivatePayPdaoFeeTransaction(config, body));
   if (method === "POST" && path === "/api/privatepay/x402/checkout") {
     const phase = String(body.phase || "create").trim().toLowerCase();
+    if (phase === "buyer")
+      return json(await createPrivatePayPaymentLinkCheckout(config, { ...body, idempotency_key: requestHeader(e, "idempotency-key") }));
     return json(phase === "challenge"
       ? await requestPrivatePayCheckoutChallenge(config, body)
       : await createPrivatePayCheckout(config, body));
@@ -6864,6 +6884,8 @@ export async function handler(event) {
       path: pathOf(event),
       status: error.statusCode || 400,
       error: error.name || "Error",
+      code: error.code || null,
+      diagnosticFields: Array.isArray(error.diagnostic_fields) ? error.diagnostic_fields : null,
       upstreamStatus: error.upstreamStatus || null,
     }));
     return withSecurityHeaders(errorResponse(error));

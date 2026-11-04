@@ -165,6 +165,9 @@ export function getConfig(env = process.env) {
     privatePayProviderHandleVerified: bool(env.PRIVATEPAY_PROVIDER_HANDLE_VERIFIED),
     // Public x402 payTo must be an ingress/settlement account, never the provider wallet.
     privatePayPaymentIngress: env.PRIVATEPAY_PAYMENT_INGRESS || "",
+    // Pin MagicBlock private transfers to the reviewed TEE validator. Regional
+    // validators require a separately reviewed deployment decision.
+    privatePayMainnetValidator: env.PRIVATEPAY_MAINNET_VALIDATOR || "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo",
     privatePayRpcUrl: env.PRIVATEPAY_RPC_URL || "",
     privatePayCluster: env.PRIVATEPAY_CLUSTER || "mainnet-beta",
     privatePayRequireGasless: bool(env.PRIVATEPAY_REQUIRE_GASLESS, true),
