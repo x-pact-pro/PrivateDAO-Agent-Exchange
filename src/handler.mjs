@@ -42,7 +42,7 @@ import { publicMarketplacePackaging, SAAS_MODULES, ENTERPRISE_SUITE } from "./sa
 import { calculatePdaoSellerListingBenefit, issuePdaoChallenge, publicPdaoBenefitPolicy, pdaoPromotionStatus, consumePdaoBenefit, runPdaoHolderBalanceSnapshots, verifyPdaoHolderAccess, PDAO_SELLER_SERVICE_ID, PDAO_TOKEN_MINT, PDAO_DEVELOPER_ALLOCATION, PDAO_DEVELOPER_LOCK_UNTIL, PDAO_DEVELOPER_LOCK_CONTRACT } from "./pdao-entitlement.mjs";
 import { runScheduledSellerSettlements } from "./settlement.mjs";
 import { HandshakeReplayCache, readSealReputation, sealkeeperFailure } from "./sealkeeper.mjs";
-import { buildPrivatePayPdaoFeeTransaction, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayRequirements, decodePrivatePayRequiredHeader, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayRail, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge, verifyPrivatePayMainnetSettlement, verifyPrivatePayPdaoFee, PRIVATEPAY_SERVICE_ID } from "./privatepay.mjs";
+import { buildPrivatePayPdaoFeeTransaction, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayPaymentLinkCheckout, createPrivatePayRequirements, decodePrivatePayRequiredHeader, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayRail, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge, verifyPrivatePayMainnetSettlement, verifyPrivatePayPdaoFee, PRIVATEPAY_SERVICE_ID } from "./privatepay.mjs";
 import { authorizePrivatePayAutopilotOperation, cancelPrivatePayAutopilotOperation, completePrivatePayAutopilotOperation, createPrivatePayAutopilotChallenge, createPrivatePayAutopilotOperationChallenge, createPrivatePayAutopilotPolicy, privatePayAutopilotStatus, revokePrivatePayAutopilotPolicy, validatePrivatePayAutopilotOperation } from "./privatepay-autopilot.mjs";
 import { handleAlibabaSpi } from "./alibaba-marketplace.mjs";
 import { encodePaymentResponseHeader } from "@x402/core/http";
@@ -5250,6 +5250,12 @@ function requestHeaders(event) {
   return event.headers || {};
 }
 
+function requestHeader(event, name) {
+  const headers = requestHeaders(event);
+  const target = String(name || "").toLowerCase();
+  return Object.entries(headers).find(([key]) => String(key).toLowerCase() === target)?.[1] || "";
+}
+
 async function questlineRoute(path, method, body) {
   const match = path.match(/^\/api\/questline\/(\d+)\/(participation\/challenge|participation|complete)$/);
   if (method !== "POST" || !match) return null;
@@ -5897,6 +5903,8 @@ async function handle(e) {
     return json(await buildPrivatePayPdaoFeeTransaction(config, body));
   if (method === "POST" && path === "/api/privatepay/x402/checkout") {
     const phase = String(body.phase || "create").trim().toLowerCase();
+    if (phase === "buyer")
+      return json(await createPrivatePayPaymentLinkCheckout(config, { ...body, idempotency_key: requestHeader(e, "idempotency-key") }));
     return json(phase === "challenge"
       ? await requestPrivatePayCheckoutChallenge(config, body)
       : await createPrivatePayCheckout(config, body));

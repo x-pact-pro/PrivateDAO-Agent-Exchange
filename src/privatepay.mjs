@@ -676,6 +676,40 @@ export async function requestPrivatePayCheckoutChallenge(config, input = {}, fet
   return { payment_id: paymentId, status: nonEmpty(payload.status) ? payload.status : "accepted" };
 }
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function createPrivatePayPaymentLinkCheckout(config, input = {}, fetchImpl = fetch) {
+  assertMerchantCheckoutReady(config);
+  const merchantId = String(input.merchant_id || input.merchantId || "").trim();
+  const linkId = String(input.link_id || input.linkId || "").trim().toLowerCase();
+  const payer = String(input.payer || "").trim();
+  const idempotencyKey = String(input.idempotency_key || input.idempotencyKey || "").trim();
+  if (!SOLANA_ADDRESS.test(merchantId))
+    throw Object.assign(new Error("merchant_id must be a valid Solana address"), { statusCode: 400, code: "PRIVATEPAY_INVALID_MERCHANT" });
+  if (!/^[a-f0-9]{64}$/.test(linkId))
+    throw Object.assign(new Error("link_id must be a 64-hex payment link id"), { statusCode: 400, code: "PRIVATEPAY_INVALID_PAYMENT_LINK" });
+  if (!SOLANA_ADDRESS.test(payer))
+    throw Object.assign(new Error("payer must be a valid Solana address"), { statusCode: 400, code: "PRIVATEPAY_INVALID_PAYER" });
+  if (!UUID_V4.test(idempotencyKey))
+    throw Object.assign(new Error("idempotency_key must be a UUIDv4"), { statusCode: 400, code: "PRIVATEPAY_INVALID_IDEMPOTENCY_KEY" });
+  const headers = { ...merchantHeaders(config), "idempotency-key": idempotencyKey, "X-Merchant-Id": merchantId };
+  const response = await fetchImpl(privatePayProviderUrl(config, `/v1/payment-links/${encodeURIComponent(merchantId)}/${encodeURIComponent(linkId)}/checkouts`), {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ payer }),
+    signal: AbortSignal.timeout(8000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (![200, 202].includes(response.status))
+    throw providerRejectedError("MagicBlock rejected payment-link checkout", "PRIVATEPAY_PAYMENT_LINK_CHECKOUT_REJECTED", response, payload);
+  return {
+    status: response.status === 202 ? "pending" : "paid",
+    provider_status: response.status,
+    ...(payload && typeof payload === "object" ? payload : {}),
+    recovery: { idempotency_key_required: true, idempotency_key: "retain-locally-and-never-log" },
+  };
+}
+
 export function decodePrivatePayRequiredHeader(header) {
   try {
     const value = JSON.parse(Buffer.from(String(header || ""), "base64url").toString("utf8"));
@@ -997,6 +1031,14 @@ export function privatePayStatus(config) {
     provider_handle_configured: stealthHandleConfigured,
     provider_handle_verified: stealthHandleVerified,
     payment_ingress_configured: paymentIngressConfigured,
+    payment_link_buyer_checkout: {
+      supported: isMagicBlockRail(config),
+      route: "/api/privatepay/x402/checkout",
+      phase: "buyer",
+      requires_idempotency_key: true,
+      idempotency_key_format: "uuidv4",
+      funded_execution: "activation_gated",
+    },
     confidential_mint_configured: !mintProblem,
     confidential_mint_program: isMagicBlockRail(config) ? "magicblock-delegated-usdc" : String(config.privatePayConfidentialMintProgram || "") || null,
     public_chain_boundary: isMagicBlockRail(config)

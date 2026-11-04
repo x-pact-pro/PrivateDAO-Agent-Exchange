@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { decodePaymentRequiredHeader } from "@x402/core/http";
 import { PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { assertPrivatePayPaymentPayload, auditPrivatePayTrace, auditPreparedPrivatePayTransfer, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayRequirements, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayMerchantDelegation, probePrivatePayRail, probePrivatePayStealthHandle, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge } from "../src/privatepay.mjs";
+import { assertPrivatePayPaymentPayload, auditPrivatePayTrace, auditPreparedPrivatePayTransfer, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayPaymentLinkCheckout, createPrivatePayRequirements, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayMerchantDelegation, probePrivatePayRail, probePrivatePayStealthHandle, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge } from "../src/privatepay.mjs";
 import { assertPrivatePayNetworkAdapter } from "../src/privatepay-networks.mjs";
 
 const TEST_CONFIDENTIAL_MINT = new PublicKey(new Uint8Array(32).fill(7)).toBase58();
@@ -100,6 +100,18 @@ test("PrivatePAY exposes Base and Robinhood identities without enabling unverifi
   assert.throws(() => assertPrivatePayNetworkAdapter({ privatePayNetwork: "robinhood" }), (error) => error.code === "PRIVATEPAY_NETWORK_RAIL_UNVERIFIED");
 });
 
+test("PrivatePAY status exposes one activation-gated buyer checkout path", () => {
+  const status = privatePayStatus(magicBlockCheckoutConfig({ privatePayEnabled: false }));
+  assert.deepEqual(status.payment_link_buyer_checkout, {
+    supported: true,
+    route: "/api/privatepay/x402/checkout",
+    phase: "buyer",
+    requires_idempotency_key: true,
+    idempotency_key_format: "uuidv4",
+    funded_execution: "activation_gated",
+  });
+});
+
 test("MagicBlock merchant checkout follows the official payments contract", async () => {
   const calls = [];
   const result = await createPrivatePayCheckout(magicBlockCheckoutConfig(), {
@@ -130,6 +142,30 @@ test("MagicBlock merchant checkout follows the official payments contract", asyn
   assert.match(body.requestHash, /^[a-f0-9]{64}$/);
   assert.equal(result.payment_id, TEST_PAYMENT_ID);
   assert.doesNotMatch(JSON.stringify(result), /merchant-api-key-fixture|payer/);
+});
+
+test("MagicBlock payment-link buyer checkout binds UUIDv4 idempotency to the provider header", async () => {
+  const calls = [];
+  const idempotencyKey = "550e8400-e29b-41d4-a716-446655440000";
+  const linkId = "a".repeat(64);
+  const result = await createPrivatePayPaymentLinkCheckout(magicBlockCheckoutConfig(), {
+    merchant_id: TEST_PAYER,
+    link_id: linkId,
+    payer: TEST_PAYER,
+    idempotency_key: idempotencyKey,
+  }, async (url, options) => {
+    calls.push({ url, options });
+    return response(202, { checkoutId: TEST_PAYMENT_ID, status: "pending" });
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `https://payments.example/v1/payment-links/${TEST_PAYER}/${linkId}/checkouts`);
+  assert.equal(calls[0].options.headers["idempotency-key"], idempotencyKey);
+  assert.equal(calls[0].options.headers["X-Merchant-Id"], TEST_PAYER);
+  assert.deepEqual(JSON.parse(calls[0].options.body), { payer: TEST_PAYER });
+  assert.equal(result.status, "pending");
+  assert.equal(result.provider_status, 202);
+  assert.equal(result.checkoutId, TEST_PAYMENT_ID);
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(idempotencyKey));
 });
 
 test("MagicBlock merchant checkout accepts the provider's nested payment response", async () => {
