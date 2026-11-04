@@ -93,7 +93,7 @@ test("PrivatePAY job lifecycle verifies, settles, executes once, and redacts pub
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: checkoutRequest.amount,
-        payTo: "So11111111111111111111111111111111111111112",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
         extra: { paymentId: "b".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -239,7 +239,7 @@ test("PrivatePAY jobs persist a pending checkout and fetch its challenge on retr
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "550000",
-        payTo: "So11111111111111111111111111111111111111112",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
         extra: { paymentId: checkoutPayment, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -290,7 +290,7 @@ test("PrivatePAY job rejects a provider challenge whose amount differs from the 
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: String(Number(checkoutRequest.amount) + 1),
-        payTo: "So11111111111111111111111111111111111111112",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
         extra: { paymentId: "e".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -385,7 +385,7 @@ test("PrivatePAY job rejects a provider challenge for a different resource", asy
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: String(checkoutRequest.amount),
-        payTo: "So11111111111111111111111111111111111111112",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
         extra: { paymentId: "0".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -433,7 +433,7 @@ test("generic PrivatePAY x402 endpoint performs verify and settle with a redacte
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "1000",
-        payTo: "So11111111111111111111111111111111111111112",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
         extra: { paymentId: "a".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -505,7 +505,7 @@ test("generic PrivatePAY x402 resumes a pending checkout by payment id", async (
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "1000",
-        payTo: "So11111111111111111111111111111111111111112",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
         extra: { paymentId: checkoutPayment, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
@@ -554,7 +554,7 @@ test("generic PrivatePAY x402 isolates checkout bindings per payer", async () =>
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
         asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         amount: "1000",
-        payTo: "So11111111111111111111111111111111111111112",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
         extra: { paymentId, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };

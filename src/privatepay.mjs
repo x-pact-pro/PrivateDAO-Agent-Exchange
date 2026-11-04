@@ -493,6 +493,7 @@ export async function createPrivatePayRequirements(config, input = {}, liveStatu
   const amount = amountBaseUnits(input);
   const pdao = await privatePayPdaoQuote(config, input, amount, { optional: input.pdao_optional === true });
   const magicBlockRail = isMagicBlockRail(config);
+  const x402PayTo = String(config.privatePayX402PayTo || config.privatePayTreasury || config.privatePayPaymentIngress || "").trim();
   const requestId = `pp_${digest({ resource, providerId, amount, nonce: input.nonce || null }).slice(0, 32)}`;
   const requirements = {
     x402Version: 2,
@@ -501,7 +502,7 @@ export async function createPrivatePayRequirements(config, input = {}, liveStatu
       network: SOLANA_MAINNET_CAIP2,
       asset: config.privatePayConfidentialMint,
       amount,
-      payTo: magicBlockRail ? config.privatePayPaymentIngress : `privatepay:${digest(providerId).slice(0, 32)}`,
+      payTo: magicBlockRail ? x402PayTo : `privatepay:${digest(providerId).slice(0, 32)}`,
       maxTimeoutSeconds: 300,
       extra: {
         privacy_rail: config.privatePayPrivacyRail,
