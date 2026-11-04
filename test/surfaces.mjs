@@ -549,6 +549,8 @@ test("every catalog capability has a stable detail page", async () => {
     assert.match(response.headers["content-type"], /^text\/html/, service.id);
     assert.match(response.body, new RegExp(service.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), service.id);
     if (service.id === "privatepay.x402") {
+      assert.match(response.body, /https:\/\/agents\.privatedao\.org\/services\/privatepay-x402/, service.id);
+      assert.doesNotMatch(response.body, /https:\/\/agents\.privatedao\.org\/api\/privatepay\/conformance/, service.id);
       assert.match(response.body, /Activation gated/, service.id);
       assert.match(response.body, /\/api\/privatepay\/status/, service.id);
       assert.doesNotMatch(response.body, /Pay quoted USDC/, service.id);

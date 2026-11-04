@@ -1337,7 +1337,7 @@ function capabilityStatus(serviceId) {
 }
 function serviceExample(service) {
   if (service.id === PRIVATEPAY_SERVICE_ID) return {
-    resource: "https://agents.privatedao.org/api/privatepay/conformance",
+    resource: "https://agents.privatedao.org/services/privatepay-x402",
     provider_id: "privatepay.x402",
     amount_base_units: "500000",
     external_reference: "order_privatepay_demo_001",
