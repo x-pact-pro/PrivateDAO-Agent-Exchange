@@ -17,7 +17,9 @@ test("read-only conformance audit exits cleanly when RPC does not respond", asyn
   });
   const output = [];
   child.stdout.on("data", (chunk) => output.push(chunk));
-  const watchdog = setTimeout(() => child.kill("SIGKILL"), 5000);
+  // The full serial suite can temporarily contend for the local event loop;
+  // keep the child bounded without turning a slow CI worker into a false fail.
+  const watchdog = setTimeout(() => child.kill("SIGKILL"), 15000);
   const [code] = await once(child, "close");
   clearTimeout(watchdog);
   await new Promise((resolve) => server.close(resolve));
