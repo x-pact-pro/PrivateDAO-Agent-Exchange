@@ -21,7 +21,7 @@ const headers = {
   "x-merchant-id": secret.PRIVATEPAY_MERCHANT_ID,
 };
 const amount = process.env.PRIVATEPAY_X402_AMOUNT || "500000";
-const resource = process.env.PRIVATEPAY_X402_RESOURCE || "https://agents.privatedao.org/api/privatepay/conformance";
+const resource = process.env.PRIVATEPAY_X402_RESOURCE || "https://agents.privatedao.org/services/privatepay-x402";
 const requestHash = crypto.createHash("sha256").update(externalReference).digest("hex");
 const create = await fetch(`${apiBase}/v1/payments`, {
   method: "POST",

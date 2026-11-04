@@ -20,7 +20,7 @@ const body = {
   amount: "500000",
   cluster: "mainnet-private",
   description: "PrivatePAY conformance checkout",
-  resource: "https://agents.privatedao.org/api/privatepay/conformance",
+  resource: "https://agents.privatedao.org/services/privatepay-x402",
   requestHash: crypto.createHash("sha256").update(externalReference).digest("hex"),
   expiresInSeconds: 600,
   payer,
