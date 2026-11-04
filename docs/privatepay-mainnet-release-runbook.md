@@ -38,6 +38,11 @@ South America: MSARyz2yVTkqiYQWWgaEtUKug7oCF7PphE9GjEYHtDh
 The crank preflight defaults to the TEE validator and accepts an explicit
 `PRIVATEPAY_MAINNET_VALIDATOR` only for a separately reviewed deployment.
 
+The PrivatePAY SPL transfer, deposit, and withdrawal builders pass the selected
+validator explicitly. The reviewed default is the TEE validator above; the
+x402 payment-link/checkout contract remains separate and does not accept a
+validator field.
+
 The release decision remains `candidate`, not an unconditional privacy claim:
 the collector marks payment-bound TDX attestation as `INCONCLUSIVE`. This
 means finalized TEE execution and the provider's public-trace evidence are

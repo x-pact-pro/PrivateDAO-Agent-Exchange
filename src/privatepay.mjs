@@ -15,6 +15,7 @@ const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 const MAGICBLOCK_PRIVACY_RAIL = "magicblock-private-ephemeral-rollup";
 const MAGICBLOCK_SCHEME = "exact-magicblock";
 const MAGICBLOCK_PRIVATE_CLUSTER = "mainnet-private";
+const DEFAULT_MAGICBLOCK_TEE_VALIDATOR = "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo";
 const PRIVATEPAY_ID = /^[a-f0-9]{64}$/;
 const MAX_PAYMENT_SIGNATURE_HEADER_BYTES = 32768;
 const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
@@ -43,6 +44,10 @@ function privateTransferCluster(config) {
 
 function isMagicBlockRail(config) {
   return String(config.privatePayPrivacyRail || "").trim() === MAGICBLOCK_PRIVACY_RAIL;
+}
+
+function magicBlockValidator(config) {
+  return String(config.privatePayMainnetValidator || DEFAULT_MAGICBLOCK_TEE_VALIDATOR).trim();
 }
 
 function validStealthHandle(value) {
@@ -357,6 +362,7 @@ export async function preparePrivatePayTransfer(config, input = {}, fetchImpl = 
     fromBalance: "base",
     toBalance: "base",
     cluster: privateTransferCluster(config),
+    ...(magicBlockRail ? { validator: magicBlockValidator(config) } : {}),
     initIfMissing: false,
     initAtasIfMissing: false,
     initVaultIfMissing: false,
@@ -447,6 +453,7 @@ export async function preparePrivatePayDeposit(config, input = {}, fetchImpl = f
     mint,
     amount: Number(amount),
     cluster: isMagicBlockRail(config) ? MAGICBLOCK_PRIVATE_CLUSTER : providerCluster(config),
+    ...(isMagicBlockRail(config) ? { validator: magicBlockValidator(config) } : {}),
     initIfMissing: false,
     initVaultIfMissing: false,
     initAtasIfMissing: false,
@@ -462,6 +469,7 @@ export async function preparePrivatePayWithdrawal(config, input = {}, fetchImpl 
     mint,
     amount: Number(amount),
     cluster: isMagicBlockRail(config) ? MAGICBLOCK_PRIVATE_CLUSTER : providerCluster(config),
+    ...(isMagicBlockRail(config) ? { validator: magicBlockValidator(config) } : {}),
     initIfMissing: false,
     initAtasIfMissing: false,
     idempotent: true,

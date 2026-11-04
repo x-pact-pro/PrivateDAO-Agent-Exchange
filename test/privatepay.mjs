@@ -11,6 +11,7 @@ const TEST_REQUEST_ID = "pp_0123456789abcdef0123456789abcdef";
 const TEST_PROVIDER_COMMITMENT = "a".repeat(64);
 const TEST_PAYER = new PublicKey(new Uint8Array(32).fill(8)).toBase58();
 const TEST_PAYMENT_ID = "c".repeat(64);
+const MAGICBLOCK_TEE_VALIDATOR = "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo";
 
 function magicBlockCheckoutConfig(overrides = {}) {
   return {
@@ -800,6 +801,7 @@ test("PrivatePAY sends a MagicBlock stealth handle instead of the provider walle
   assert.equal(requestBody.visibility, "private");
   assert.equal(requestBody.fromBalance, "base");
   assert.equal(requestBody.toBalance, "base");
+  assert.equal(requestBody.validator, MAGICBLOCK_TEE_VALIDATOR);
 });
 
 test("PrivatePAY refuses a MagicBlock transfer without a stealth handle", async () => {
@@ -877,6 +879,7 @@ test("MagicBlock PrivatePAY never prepares the public mainnet cluster", async ()
   });
   assert.equal(requestBody.cluster, "mainnet-private");
   assert.equal(requestBody.visibility, "private");
+  assert.equal(requestBody.validator, MAGICBLOCK_TEE_VALIDATOR);
 });
 
 test("PrivatePAY prepares deposit and withdrawal as separate unsigned audit legs", async () => {
@@ -903,8 +906,10 @@ test("PrivatePAY prepares deposit and withdrawal as separate unsigned audit legs
   assert.equal(seen[0].body.owner, input.owner);
   assert.equal(seen[0].body.amount, 10000);
   assert.equal(seen[0].body.cluster, "mainnet-private");
+  assert.equal(seen[0].body.validator, MAGICBLOCK_TEE_VALIDATOR);
   assert.equal(seen[1].body.idempotent, true);
   assert.equal(seen[1].body.cluster, "mainnet-private");
+  assert.equal(seen[1].body.validator, MAGICBLOCK_TEE_VALIDATOR);
   assert.equal(Object.hasOwn(deposit, "private_key"), false);
   assert.equal(Object.hasOwn(withdrawal, "private_key"), false);
 });
