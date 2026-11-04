@@ -16,6 +16,7 @@ export function questlineConfig(env = process.env) {
     baseUrl: asText(env.MAGICBLOCK_QUESTLINE_BASE_URL).replace(/\/$/, ""),
     bearerToken: asText(env.MAGICBLOCK_QUESTLINE_API_KEY),
     secretId: asText(env.MAGICBLOCK_QUESTLINE_SECRET_ID),
+    requireSecretManager: env.MAGICBLOCK_QUESTLINE_REQUIRE_SECRET_MANAGER === "true",
     pushPath: asText(env.MAGICBLOCK_QUESTLINE_PUSH_PATH) || QUESTLINE_PUSH_PATH,
     pushEnabled: env.MAGICBLOCK_QUESTLINE_PUSH_ENABLED === "true",
   };
@@ -49,6 +50,7 @@ async function readJson(response) {
 export function createQuestlineClient({ config = questlineConfig(), fetchImpl = fetch, sleepImpl = sleep, logger = () => {}, maxAttempts = 3 } = {}) {
   async function pushCompletion({ wallet, evidence, idempotencyKey }) {
     const pubkey = assertSolanaWallet(wallet);
+    if (config.requireSecretManager && !config.secretId) throw safeError("QUESTLINE_SECRET_MANAGER_REQUIRED", "Questline requires a Secrets Manager reference", 503);
     if (!config.baseUrl || !config.bearerToken) throw safeError("QUESTLINE_NOT_CONFIGURED", "Questline credentials are not configured", 503);
     const url = `${config.baseUrl}${config.pushPath.startsWith("/") ? config.pushPath : `/${config.pushPath}`}`;
     const body = { id: config.questId, pubkey, evidence };

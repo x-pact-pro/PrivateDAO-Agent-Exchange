@@ -14,6 +14,19 @@ test("Questline supports a Secrets Manager reference without requiring a plainte
   assert.equal(config.bearerToken, "");
 });
 
+test("Questline can require Secrets Manager before using a bearer token", async () => {
+  const config = questlineConfig({
+    MAGICBLOCK_QUESTLINE_API_KEY: "local-test-token",
+    MAGICBLOCK_QUESTLINE_BASE_URL: "https://quests.example.test",
+    MAGICBLOCK_QUESTLINE_REQUIRE_SECRET_MANAGER: "true",
+  });
+  const client = createQuestlineClient({ config });
+  await assert.rejects(
+    () => client.pushCompletion({ wallet, evidence: {}, idempotencyKey: "test" }),
+    (error) => error.code === "QUESTLINE_SECRET_MANAGER_REQUIRED" && error.statusCode === 503,
+  );
+});
+
 function records() {
   const storage = new MemoryStore();
   const freeJob = { id: "job_free", service_id: "verify.basic", status: "completed", payment_mode: "direct", receipt_id: "receipt_free" };

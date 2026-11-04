@@ -22,6 +22,8 @@ The deployment environment must provide the variable names already present in th
 - `MAGICBLOCK_QUESTLINE_SECRET_ID` (recommended; Secrets Manager JSON key
   `MAGICBLOCK_QUESTLINE_API_KEY` or `QUESTLINE_API_KEY`)
 - `MAGICBLOCK_QUESTLINE_API_KEY` (legacy fallback; do not use in production)
+- `MAGICBLOCK_QUESTLINE_REQUIRE_SECRET_MANAGER` (set to `true` in production;
+  refuses the legacy fallback when no Secrets Manager reference is present)
 - `MAGICBLOCK_QUESTLINE_BASE_URL`
 - `MAGICBLOCK_QUESTLINE_QUEST_ID`
 

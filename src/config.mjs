@@ -193,6 +193,7 @@ export function getConfig(env = process.env) {
       baseUrl: env.MAGICBLOCK_QUESTLINE_BASE_URL || "",
       bearerToken: env.MAGICBLOCK_QUESTLINE_API_KEY || "",
       secretId: env.MAGICBLOCK_QUESTLINE_SECRET_ID || "",
+      requireSecretManager: bool(env.MAGICBLOCK_QUESTLINE_REQUIRE_SECRET_MANAGER),
       pushPath: env.MAGICBLOCK_QUESTLINE_PUSH_PATH || "/api/validators/run",
       pushEnabled: bool(env.MAGICBLOCK_QUESTLINE_PUSH_ENABLED),
     },
