@@ -163,8 +163,12 @@ export function getConfig(env = process.env) {
     // wallet directly in the private transfer request.
     privatePayProviderHandle: env.PRIVATEPAY_PROVIDER_HANDLE || "",
     privatePayProviderHandleVerified: bool(env.PRIVATEPAY_PROVIDER_HANDLE_VERIFIED),
-    // Public x402 payTo must be an ingress/settlement account, never the provider wallet.
+    // Private transfer operations use a separate ingress; merchant x402 checkout
+    // uses privatePayX402PayTo below and never falls back to the provider wallet.
     privatePayPaymentIngress: env.PRIVATEPAY_PAYMENT_INGRESS || "",
+    // MagicBlock merchant checkout currently returns the configured treasury as
+    // the x402 recipient. Keep this separate from the private transfer ingress.
+    privatePayX402PayTo: env.PRIVATEPAY_X402_PAY_TO || env.PRIVATEPAY_TREASURY || env.SOLANA_TREASURY || "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
     // Pin MagicBlock private transfers to the reviewed TEE validator. Regional
     // validators require a separately reviewed deployment decision.
     privatePayMainnetValidator: env.PRIVATEPAY_MAINNET_VALIDATOR || "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo",

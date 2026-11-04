@@ -763,6 +763,22 @@ test("PrivatePAY never requires PDAO holdings for ordinary x402 execution", asyn
   assert.equal(Object.hasOwn(extra, "pdao_fee_base_units"), false);
 });
 
+test("MagicBlock x402 checkout binds to the configured treasury recipient, not private transfer ingress", async () => {
+  const config = magicBlockCheckoutConfig({
+    privatePayPaymentIngress: "H2qTahnGPy83GZ3H29eHk5sG6bGZLPRATUPvVKfCrqsi",
+    privatePayX402PayTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+    privatePayTreasury: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+    privatePayPdaoGateEnabled: false,
+  });
+  const result = await createPrivatePayRequirements(config, {
+    resource: "https://agents.example/services/privatepay-x402",
+    provider_id: "privatepay.x402",
+    amount_base_units: "500000",
+  }, { enabled: true });
+  assert.equal(result.requirements.accepts[0].payTo, config.privatePayX402PayTo);
+  assert.notEqual(result.requirements.accepts[0].payTo, config.privatePayPaymentIngress);
+});
+
 test("PrivatePAY forwards MagicBlock verify to its versioned facilitator endpoint", async () => {
   const accepted = {
     scheme: "exact-magicblock",
