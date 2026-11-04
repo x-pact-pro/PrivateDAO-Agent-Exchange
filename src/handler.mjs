@@ -3919,6 +3919,23 @@ function assertPrivatePayJobQuoteBinding(localRequirements, providerRequirements
   return providerRequirements;
 }
 
+function privatePayCheckoutMismatchFields(providerRequirements, localRequirements, expectedPaymentId) {
+  const provider = providerRequirements?.accepts?.[0];
+  const local = localRequirements?.accepts?.[0];
+  const checks = [
+    ["resource", providerRequirements?.resource?.url, localRequirements?.resource?.url],
+    ["payment_id", provider?.extra?.paymentId, expectedPaymentId],
+    ["scheme", provider?.scheme, local?.scheme],
+    ["amount", provider?.amount, local?.amount],
+    ["asset", provider?.asset, local?.asset],
+    ["payTo", provider?.payTo, local?.payTo],
+    ["network", provider?.network, local?.network],
+    ["cluster", provider?.extra?.cluster, local?.extra?.cluster],
+    ["settlement", provider?.extra?.settlement, local?.extra?.settlement],
+  ];
+  return checks.filter(([, providerValue, localValue]) => providerValue !== localValue).map(([field]) => field);
+}
+
 async function createPrivatePayJobChallenge({ jobId, serviceId, payer, amount_base_units, pdao_benefits = false }) {
   const resource = `https://${config.domain}/api/jobs/${jobId}/privatepay`;
   const liveStatus = await privatePayReadiness();
@@ -5814,18 +5831,13 @@ async function handle(e) {
       if (challenge.status === "pending")
         return json({ error: "payment_pending", payment_id: checkout.payment_id, status: "pending", retry_after_seconds: challenge.retry_after_seconds || 2 }, 202, { "retry-after": String(challenge.retry_after_seconds || 2) });
       const providerRequirements = decodePrivatePayRequiredHeader(challenge.payment_required_header);
-      const providerAccepts = providerRequirements.accepts[0];
-      const localAccepts = requirements.requirements.accepts[0];
-      if (providerRequirements.resource?.url !== requirements.requirements.resource?.url
-        || providerAccepts?.extra?.paymentId !== checkout.payment_id
-        || providerAccepts?.scheme !== localAccepts.scheme
-        || providerAccepts?.amount !== localAccepts.amount
-        || providerAccepts?.asset !== localAccepts.asset
-        || providerAccepts?.payTo !== localAccepts.payTo
-        || providerAccepts?.network !== localAccepts.network
-        || providerAccepts?.extra?.cluster !== localAccepts.extra?.cluster
-        || providerAccepts?.extra?.settlement !== localAccepts.extra?.settlement)
-        throw Object.assign(new Error("MagicBlock returned a challenge for a different checkout"), { statusCode: 502, code: "PRIVATEPAY_CHECKOUT_BINDING_MISMATCH" });
+      const mismatchFields = privatePayCheckoutMismatchFields(providerRequirements, requirements.requirements, checkout.payment_id);
+      if (mismatchFields.length)
+        throw Object.assign(new Error("MagicBlock returned a challenge for a different checkout"), {
+          statusCode: 502,
+          code: "PRIVATEPAY_CHECKOUT_BINDING_MISMATCH",
+          diagnostic_fields: mismatchFields,
+        });
       await checkoutStore.put("Payments", requestKey, { ...nextBinding, state: "payment_required", updated_at: now() });
       await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, { ...nextBinding, state: "payment_required", updated_at: now() });
       return json({
@@ -6864,6 +6876,8 @@ export async function handler(event) {
       path: pathOf(event),
       status: error.statusCode || 400,
       error: error.name || "Error",
+      code: error.code || null,
+      diagnosticFields: Array.isArray(error.diagnostic_fields) ? error.diagnostic_fields : null,
       upstreamStatus: error.upstreamStatus || null,
     }));
     return withSecurityHeaders(errorResponse(error));
