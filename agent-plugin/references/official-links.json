@@ -1,0 +1,16 @@
+{
+  "website": "https://privatedao.org/",
+  "thesis": "https://privatedao.org/thesis/",
+  "token": "https://privatedao.org/token/",
+  "privatepay": "https://privatedao.org/privatepay",
+  "agent_exchange": "https://agents.privatedao.org/",
+  "mcp": "https://agents.privatedao.org/mcp",
+  "mcp_discovery": "https://agents.privatedao.org/.well-known/mcp.json",
+  "openapi": "https://agents.privatedao.org/openapi.json",
+  "agent_card": "https://agents.privatedao.org/.well-known/agent-card.json",
+  "github": "https://github.com/X-PACT/PrivateDAO",
+  "superteam_profile": "https://superteam.fun/earn/t/Private-dao-1",
+  "social_x": "https://x.com/privateDAOOS",
+  "social_telegram": "https://t.me/privateDAOOS",
+  "social_discord": "https://discord.gg/PRcD9nFeVf"
+}

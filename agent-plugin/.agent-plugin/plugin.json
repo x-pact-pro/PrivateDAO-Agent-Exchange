@@ -1,0 +1,18 @@
+{
+  "name": "dev-6ade4cf515fc8191a14b35a8f834ee07",
+  "version": "1.2.6",
+  "description": "PrivateDAO Agent Exchange: commercial verification, intelligence, and PrivatePAY x402 services.",
+  "homepage": "https://privatedao.org/",
+  "repository": "https://github.com/X-PACT/PrivateDAO",
+  "publisher": "PrivateDAO",
+  "website": "https://privatedao.org/",
+  "token": {
+    "symbol": "PDAO",
+    "website": "https://privatedao.org/token/"
+  },
+  "mcp": {
+    "endpoint": "https://agents.privatedao.org/mcp",
+    "discovery": "https://agents.privatedao.org/.well-known/mcp.json",
+    "auth": "none"
+  }
+}

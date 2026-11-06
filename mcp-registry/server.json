@@ -1,0 +1,13 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.X-PACT/pdao-agent-exchange",
+  "title": "PrivateDAO Agent Exchange",
+  "description": "PrivateDAO services for verification, multichain intelligence, risk, and agent workflows.",
+  "version": "1.6.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://agents.privatedao.org/mcp"
+    }
+  ]
+}

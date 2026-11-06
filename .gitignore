@@ -1,0 +1,8 @@
+**/node_modules/
+**/.ccp/
+**/build/
+**/.next/
+*.env
+*.pem
+*.key
+*.apk

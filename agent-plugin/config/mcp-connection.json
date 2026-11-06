@@ -1,0 +1,15 @@
+{
+  "name": "PrivateDAO Agent Exchange",
+  "transport": "streamable-http",
+  "url": "https://agents.privatedao.org/mcp",
+  "discovery_url": "https://agents.privatedao.org/.well-known/mcp.json",
+  "openapi_url": "https://agents.privatedao.org/openapi.json",
+  "agent_card_url": "https://agents.privatedao.org/.well-known/agent-card.json",
+  "headers": {},
+  "authentication": "none for public discovery and read-only tools",
+  "confirmation": "required before paid or state-changing actions",
+  "health_test": {
+    "method": "tools/list",
+    "expected_http_status": 200
+  }
+}

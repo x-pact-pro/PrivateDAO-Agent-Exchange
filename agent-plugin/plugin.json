@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "name": "PrivateDAO Agent Exchange",
+  "version": "1.2.0",
+  "title": "PrivateDAO | Private Operations, Verifiable Outcomes",
+  "description": "A portable knowledge and workflow plugin for PrivateDAO, its chain-agnostic Kernel, Agent Exchange, awards, PDAO community asset, and PrivatePAY x402.",
+  "language": "en",
+  "publisher": {
+    "name": "PrivateDAO",
+    "website": "https://privatedao.org/",
+    "repository": "https://github.com/X-PACT/PrivateDAO"
+  },
+  "homepage": "https://privatedao.org/",
+  "website": "https://privatedao.org/",
+  "token": {
+    "symbol": "PDAO",
+    "website": "https://privatedao.org/token/",
+    "description": "The official PrivateDAO token surface. This package does not embed a mint address or signing credentials."
+  },
+  "entrypoints": {
+    "mcp": "https://agents.privatedao.org/mcp",
+    "mcp_discovery": "https://agents.privatedao.org/.well-known/mcp.json",
+    "openapi": "https://agents.privatedao.org/openapi.json"
+  },
+  "configuration": {
+    "mcp": "config/mcp-connection.json",
+    "authentication": "config/authentication.md",
+    "branding": "config/branding.md"
+    ,"host_connections": "config/host-connection-profiles.md"
+  },
+  "public_surfaces": {
+    "thesis": "https://privatedao.org/thesis/",
+    "token": "https://privatedao.org/token/",
+    "agent_exchange": "https://agents.privatedao.org/",
+    "privatepay": "https://privatedao.org/privatepay"
+  },
+  "skills": [
+    "skills/private-dao-overview.md",
+    "skills/kernel-agnostic-chains.md",
+    "skills/agent-exchange.md",
+    "skills/privatepay-x402.md",
+    "skills/privatepay-execution.md",
+    "skills/service-advisor.md",
+    "skills/usage-guide.md",
+    "skills/verification-suite.md",
+    "skills/wallet-risk.md",
+    "skills/transaction-safety.md",
+    "skills/research-synthesis.md",
+    "skills/receipt-evidence.md",
+    "skills/agent-discovery.md",
+    "skills/investor-briefing.md"
+  ],
+  "profiles": [
+    "profiles/company.md",
+    "profiles/investor.md",
+    "profiles/agent-exchange.md"
+  ],
+  "safety": {
+    "no_private_keys": true,
+    "no_investment_guarantees": true,
+    "paid_actions_require_user_confirmation": true,
+    "award_claims_require_linked_evidence": true
+  }
+}

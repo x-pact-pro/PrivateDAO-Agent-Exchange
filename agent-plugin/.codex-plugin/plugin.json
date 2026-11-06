@@ -1,0 +1,34 @@
+{
+  "name": "dev-6ade4cf515fc8191a14b35a8f834ee07",
+  "version": "1.3.0",
+  "description": "PrivateDAO Agent Exchange with 27 commercial services and PrivatePAY x402, a live Solana Mainnet private settlement service powered by the MagicBlock private rollup rail.",
+  "author": {
+    "name": "PrivateDAO",
+    "url": "https://privatedao.org/"
+  },
+  "homepage": "https://privatedao.org/",
+  "repository": "https://github.com/X-PACT/PrivateDAO",
+  "website": "https://privatedao.org/",
+  "token": {
+    "symbol": "PDAO",
+    "url": "https://privatedao.org/token/"
+  },
+  "mcp": {
+    "url": "https://agents.privatedao.org/mcp",
+    "discovery": "https://agents.privatedao.org/.well-known/mcp.json",
+    "authentication": "none"
+  },
+  "apps": "./.app.json",
+  "interface": {
+    "displayName": "PrivateDAO Agent Exchange",
+    "shortDescription": "PrivatePAY x402 on Solana Mainnet plus 26 commercial verification and intelligence services.",
+    "longDescription": "PrivateDAO Agent Exchange provides 27 commercial services. PrivatePAY x402 is a live service at https://agents.privatedao.org/services/privatepay-x402 for privacy-preserving payment challenges and settlement status on Solana Mainnet. It uses MagicBlock's private rollup settlement rail and exposes a request commitment and settlement status, with quote-first approval and user-controlled signing for paid actions.",
+    "developerName": "PrivateDAO",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "website": "https://privatedao.org/",
+    "website_url": "https://privatedao.org/",
+    "token": "https://privatedao.org/token/"
+  },
+  "skills": ["skills/privatedao"]
+}

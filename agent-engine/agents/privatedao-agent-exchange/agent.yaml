@@ -1,0 +1,44 @@
+# Human-readable app slug used by Agent Engine tooling.
+# `agentengine create` should rewrite this when generating a new app from the template.
+name: privatedao-agent-exchange
+# Node entry point for the SDK App instance.
+# Format: <module path>:<export name>. This template exposes `app` from
+# src/agent_privatedao_agent_exchange/main.ts (compiled to dist/agent_privatedao_agent_exchange/main.js).
+entrypoint: agent_privatedao_agent_exchange.main:app
+framework: langgraph
+# Programming language for this agent.
+language: typescript
+# Runtime feature flags controlled by agent.yaml, not .env. A key that is
+# present here wins over any ENABLE_* environment variable, so declaring memory
+# keeps ambient environment state from switching it on behind your back.
+# Set memory to true to enable long-term profile memory; VOYAGE_API_KEY must be
+# present in .env when memory is enabled.
+features:
+  durable_workflow: true
+  memory: false
+# Tool placement and pass-through secrets. This template's tools are all
+# remote-capable, so they run in the tool sandbox.
+sandboxes:
+  agent:
+    secrets: ["*"]
+    tools: []
+  tool:
+    secrets: ["*"]
+    tools:
+      - get_current_date
+      - save_user_info
+      - recall_user_info
+version: 0.1.0
+mcp:
+  servers:
+    privatedao_agent_exchange:
+      transport: streamable_http
+      url: https://agents.privatedao.org/mcp
+      auth:
+        type: none
+      timeout_seconds: 30
+network:
+  egress:
+    - fqdn: agents.privatedao.org
+      ports: [443]
+  egress_mode: allow_list
