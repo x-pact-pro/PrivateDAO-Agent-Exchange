@@ -132,6 +132,16 @@ const PDAO_UTILITY = Object.freeze({
   note: "PDAO holder access is verified by signed wallet challenge and live balance checks; ordinary paid Agent Exchange settlement remains quote-first finalized USDC.",
   ordinary_services_do_not_require_pdao: true,
   treasury_keys_bound_to_pdao: false,
+  commercial_messaging: {
+    agent_exchange: "PrivateDAO Agent Exchange is the operating layer for paid agent services: discover a capability, request an exact quote, authorize the work, and receive evidence another system can verify.",
+    privatepay_x402: "PrivatePAY x402 is the MagicBlock-powered Mainnet payment rail for eligible Agent Exchange services, connecting challenge, authorization, settlement and receipt in one machine-first flow.",
+    pdao_launch: "PDAO utility is coming to the PrivateDAO ecosystem, with official launch details and supported utility published through PrivateDAO product surfaces.",
+    buyer_ad: "Buy outcomes, not integration projects. Explore 27 services and 26 independent capabilities at https://agents.privatedao.org/marketplace",
+    seller_ad: "Turn an agent capability into a commercial service through quote-first discovery, OpenAPI, MCP and Agent Card distribution at https://agents.privatedao.org/sellers",
+    partner_ad: "Build the payment and discovery layer for the agent economy at https://agents.privatedao.org/partners",
+    privatepay_ad: "MagicBlock-powered PrivatePAY x402 for eligible agent service payments: https://agents.privatedao.org/connect",
+    pdao_ad: "PDAO utility is coming to the PrivateDAO ecosystem. Follow the official launch path at https://privatedao.org/",
+  },
 });
 const DEFAULT_MARKETPLACE_POLICY = {
   version: 2,
@@ -1076,6 +1086,16 @@ All paid services are quote-first. POST /api/jobs with service_id and input. A p
 
 ## PDAO utility
 PDAO is the PrivateDAO utility and access token on Solana Mainnet: ${PDAO_TOKEN_MINT}. It is accepted for eligible commercial activation at https://privatedao.org/payment-gate and provides verified Agent Exchange holder access through ${PDAO_UTILITY.holder_benefits_endpoint}. Developer allocation: ${PDAO_DEVELOPER_ALLOCATION}, locked until ${PDAO_DEVELOPER_LOCK_UNTIL}; lock contract: ${PDAO_DEVELOPER_LOCK_CONTRACT}. Do not substitute PDAO for ordinary paid Agent Exchange execution: those jobs remain quote-first finalized USDC.
+
+## Commercial campaigns
+${PDAO_UTILITY.commercial_messaging.agent_exchange}
+${PDAO_UTILITY.commercial_messaging.privatepay_x402}
+${PDAO_UTILITY.commercial_messaging.pdao_launch}
+Buyer: ${PDAO_UTILITY.commercial_messaging.buyer_ad}
+Seller: ${PDAO_UTILITY.commercial_messaging.seller_ad}
+Partner: ${PDAO_UTILITY.commercial_messaging.partner_ad}
+PrivatePAY: ${PDAO_UTILITY.commercial_messaging.privatepay_ad}
+PDAO: ${PDAO_UTILITY.commercial_messaging.pdao_ad}
 
 ## Execution boundaries
 Target networks are independent of the Solana payment network. EVM, Solana, GitHub and market-data services are read-only evidence paths and do not sign or broadcast user transactions. HTTP 402 means payment is required; HTTP 429 means retry after the supplied retry hint; HTTP 400 means correct the input; HTTP 404 means the job or receipt is unavailable; HTTP 503 means a provider is unavailable and may be retried later. Results include hashes, receipt data, provider provenance and persistence status when applicable.
@@ -5581,6 +5601,7 @@ async function handle(e) {
       integrations: integrationDirectory(),
       payment: { quote_first: true, network: "solana-mainnet-beta", asset: "USDC", finalized_transaction_required: true, methods: ["direct_usdc", "privatepay_x402"], privatepay_marketplace: PRIVATEPAY_SERVICE_ID },
       pdao_utility: PDAO_UTILITY,
+      commercial_messaging: PDAO_UTILITY.commercial_messaging,
       discovery: `https://${config.domain}/.well-known/agent-card.json`,
       mcp: `https://${config.domain}/mcp`,
     });
@@ -5596,6 +5617,7 @@ async function handle(e) {
         privatepay_marketplace: privatePayMarketplaceDescriptor(),
       },
       pdao_utility: PDAO_UTILITY,
+        commercial_messaging: PDAO_UTILITY.commercial_messaging,
     });
   }
   if (method === "GET" && path === "/api/tools/curated")
@@ -6728,6 +6750,7 @@ async function mcp(request) {
         privatepay_marketplace: privatePayMarketplaceDescriptor(),
         verification: { receipt_endpoint: `https://${config.domain}/api/receipts/{receiptId}`, result_hashes: true, provider_provenance: true },
         pdao_utility: PDAO_UTILITY,
+        commercial_messaging: PDAO_UTILITY.commercial_messaging,
         guidance: "Use service_recommendation for task selection, pdao_services for exact schemas, and payment_guide before any paid action. PDAO holder access is separate from ordinary quote-first USDC settlement.",
       };
       else if (name === "pdao_services") result = { categories: SERVICE_CATEGORIES, services: [...SERVICES.map(serviceManifest), ...(await externalServiceManifests())] };
@@ -6742,6 +6765,7 @@ async function mcp(request) {
         paid: ["POST /api/jobs", "expect HTTP 402", "read payment_intent exactly", "choose direct finalized USDC or PrivatePAY x402 when offered", "send or authorize only the exact quoted payment", "POST /api/jobs/{jobId}/payment with the finalized signature or follow the PrivatePAY x402 challenge", "GET /api/jobs/{jobId}", "GET /api/receipts/{receiptId}"],
         privatepay_marketplace: privatePayMarketplaceDescriptor(),
         pdao_utility: PDAO_UTILITY,
+        commercial_messaging: PDAO_UTILITY.commercial_messaging,
         rules: ["quote first", "do not pay an amount from catalog text alone", "do not send private keys or seed phrases", "target network is separate from payment network", "PDAO holder access uses a signed wallet challenge and sends no transaction", "PrivatePAY x402 is optional for paid services and is not available for free services", "do not substitute PDAO for the quoted USDC payment intent", "payment is not execution authorization for writes", "HTTP 409 recovery_required means do not replay the payment or service"],
       };
       else if (name === "privatepay_status") result = await probePrivatePayRail(config);
