@@ -745,6 +745,7 @@ function card() {
       pdaoUtility: PDAO_UTILITY,
       paymentRail: "USDC on Solana Mainnet for ordinary paid services; eligible token-holder access requires a wallet signature and sends no transaction",
     },
+    commercialMessaging: PDAO_UTILITY.commercial_messaging,
     agentGuidance: "Use pdao_services to inspect the catalog, service_recommendation to map a task to a service, and provider_integrations to understand evidence sources. Free jobs execute immediately; paid jobs return a quote and payment_intent before any execution.",
     workflow: {
       discovery: `GET https://${config.domain}/.well-known/agent-card.json`,
