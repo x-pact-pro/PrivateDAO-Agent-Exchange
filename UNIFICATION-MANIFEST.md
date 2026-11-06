@@ -15,7 +15,7 @@ deployable product from the PrivateDAO Core and PDAO Wallet.
 
 - Runtime source was moved from `/home/x-pact/PrivateDAO-Agent-Exchange`.
 - Unified recovery Git metadata: `/home/x-pact/.privatedao-agent-exchange-recovery.git`.
-- Recovery commit: `d3a3466`.
+- Recovery commit: `f3565b7`.
 - The last local Git checkout used for comparison is
   `/tmp/privatedao-agent-exchange-publish`.
 - No credentials, wallet keys, or provider secrets are stored in this product
@@ -26,5 +26,8 @@ deployable product from the PrivateDAO Core and PDAO Wallet.
 - `npm test`: 201 tests, 200 passed, 1 skipped, 0 failed.
 - `npm run lint`: passed.
 - `npm run verify:kernel-boundary`: passed.
+- `npm run verify:live-surface`: passed against `https://agents.privatedao.org`
+  with 27 services, 26 independent services, finalized-USDC payment
+  verification, and operational PrivatePAY catalog metadata.
 - Security audit reports three low-severity transitive `elliptic` findings;
   no force upgrade was applied.
