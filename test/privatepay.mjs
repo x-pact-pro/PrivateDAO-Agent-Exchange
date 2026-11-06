@@ -354,9 +354,13 @@ test("PrivatePAY challenge has commitments only and no payment metadata", async 
   assert.equal(result.resource_commitment.length, 35);
   assert.equal(result.provider_commitment.length, 64);
   assert.equal(result.amount_base_units, "1000");
-  const requirements = await createPrivatePayRequirements(config, { resource: "api://example", provider_id: "provider-1", amount_base_units: "1000" });
+  const requirements = await createPrivatePayRequirements(config, { resource: "api://example", provider_id: "provider-1", amount_base_units: "1000", nonce: "n1" });
   assert.equal(requirements.requirements.accepts[0].scheme, "privatepay");
   assert.equal(decodePaymentRequiredHeader(requirements.header).accepts[0].amount, "1000");
+  const sameRetry = await createPrivatePayRequirements(config, { resource: "api://example", provider_id: "provider-1", amount_base_units: "1000", nonce: "n1" });
+  const nextPayment = await createPrivatePayRequirements(config, { resource: "api://example", provider_id: "provider-1", amount_base_units: "1000", nonce: "n2" });
+  assert.equal(sameRetry.requirements.accepts[0].extra.paymentId, requirements.requirements.accepts[0].extra.paymentId);
+  assert.notEqual(nextPayment.requirements.accepts[0].extra.paymentId, requirements.requirements.accepts[0].extra.paymentId);
   for (const key of [
     "payer", "recipient", "amount", "fee_payer", "payment_signature", "purchase_description",
     "deposit_signature", "withdrawal_signature", "deposit_at", "withdrawal_at", "network_fee",
