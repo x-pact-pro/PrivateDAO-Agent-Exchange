@@ -14,6 +14,8 @@ deployable product from the PrivateDAO Core and PDAO Wallet.
 ## Source boundary
 
 - Runtime source was moved from `/home/x-pact/PrivateDAO-Agent-Exchange`.
+- Unified recovery Git metadata: `/home/x-pact/.privatedao-agent-exchange-recovery.git`.
+- Recovery commit: `d3a3466`.
 - The last local Git checkout used for comparison is
   `/tmp/privatedao-agent-exchange-publish`.
 - No credentials, wallet keys, or provider secrets are stored in this product
