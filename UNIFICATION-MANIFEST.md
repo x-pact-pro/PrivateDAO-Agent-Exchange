@@ -29,5 +29,7 @@ deployable product from the PrivateDAO Core and PDAO Wallet.
 - `npm run verify:live-surface`: passed against `https://agents.privatedao.org`
   with 27 services, 26 independent services, finalized-USDC payment
   verification, and operational PrivatePAY catalog metadata.
+- Read-only AWS/GitHub region alignment is recorded in
+  `/home/x-pact/PrivateDAO-ARCHIVE-20261106/LIVE-ALIGNMENT-REPORT-2026-11-06.md`.
 - Security audit reports three low-severity transitive `elliptic` findings;
   no force upgrade was applied.
