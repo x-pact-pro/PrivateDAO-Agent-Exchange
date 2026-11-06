@@ -61,6 +61,10 @@ test("PrivatePAY product page separates free demo, live pricing, privacy scope, 
   assert.match(response.body, /Solflare/);
   assert.match(response.body, /Phantom/);
   assert.match(response.body, /wallet-standard:register-wallet/);
+  assert.match(response.body, /VersionedTransaction\.deserialize/);
+  assert.match(response.body, /Transaction\.from/);
+  assert.match(response.body, /PDAO benefits remain optional/);
+  assert.match(response.body, /USDC settlement/);
   assert.match(response.body, /temporarily unavailable|HTTP/);
   assert.doesNotMatch(response.body, /claim.*example/i);
 });
