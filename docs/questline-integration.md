@@ -2,7 +2,7 @@
 
 Quest 94 is exposed through the Agent Exchange Lambda at:
 
-- `GET /api/questline/94/status?user={SOLANA_PUBKEY}`
+- `GET https://agents.privatedao.org/api/questline/94/status?user=${pubkey}`
 - `POST /api/questline/94/participation/challenge`
 - `POST /api/questline/94/participation`
 - `POST /api/questline/94/complete`
@@ -15,8 +15,10 @@ safe to poll and is the preferred integration over server-side Push.
 
 The route is stable for future quests: add their numeric IDs to the deployment
 configuration variable `MAGICBLOCK_QUESTLINE_QUEST_IDS`, for example `94,95,96`.
-The same route shape then applies to each quest:
-`/api/questline/{questId}/status?user={SOLANA_PUBKEY}`.
+The same route shape then applies to each quest. In the MagicBlock Pull form,
+paste the literal placeholder `${pubkey}`; MagicBlock replaces it with the
+user wallet before making the GET request:
+`https://agents.privatedao.org/api/questline/{questId}/status?user=${pubkey}`.
 
 The Push Bearer credential shown in the MagicBlock console is not needed by
 Pull. Treat any credential visible in a screenshot or chat as compromised and
