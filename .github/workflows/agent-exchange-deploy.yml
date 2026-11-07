@@ -299,17 +299,17 @@ jobs:
           ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
           API_SOURCE_ARN="arn:aws:execute-api:${AWS_REGION}:${ACCOUNT_ID}:${API_ID}/*/*/*"
           STATEMENT_ID="agent-exchange-api-${DEPLOYED_VERSION}"
-          if ! aws lambda add-permission \
+          if ! PERMISSION_ERROR="$(aws lambda add-permission \
             --function-name "$FUNCTION_NAME" \
             --qualifier "$DEPLOYED_VERSION" \
             --statement-id "$STATEMENT_ID" \
             --action lambda:InvokeFunction \
             --principal apigateway.amazonaws.com \
-            --source-arn "$API_SOURCE_ARN" >/dev/null 2>&1; then
-            aws lambda get-policy \
-              --function-name "$FUNCTION_NAME" \
-              --qualifier "$DEPLOYED_VERSION" \
-              | jq -e --arg sid "$STATEMENT_ID" '.Policy | fromjson | .Statement | any(.Sid == $sid)' >/dev/null
+            --source-arn "$API_SOURCE_ARN" 2>&1)"; then
+            if ! printf '%s\n' "$PERMISSION_ERROR" | grep -q 'ResourceConflictException'; then
+              printf '%s\n' "$PERMISSION_ERROR" >&2
+              exit 1
+            fi
           fi
 
           for INTEGRATION_ID in $(aws apigatewayv2 get-integrations \
@@ -463,14 +463,16 @@ jobs:
 
           aws events put-targets --rule "$RULE_NAME" --targets "Id=agent-exchange-settlement,Arn=$FUNCTION_ARN" >/dev/null
 
-          if ! aws lambda add-permission \
+          if ! PERMISSION_ERROR="$(aws lambda add-permission \
             --function-name "$FUNCTION_NAME" \
             --statement-id "$STATEMENT_ID" \
             --action lambda:InvokeFunction \
             --principal events.amazonaws.com \
-            --source-arn "$RULE_ARN" >/dev/null 2>&1; then
-            aws lambda get-policy --function-name "$FUNCTION_NAME" \
-              | jq -e --arg sid "$STATEMENT_ID" '.Policy | fromjson | .Statement | any(.Sid == $sid)' >/dev/null
+            --source-arn "$RULE_ARN" 2>&1)"; then
+            if ! printf '%s\n' "$PERMISSION_ERROR" | grep -q 'ResourceConflictException'; then
+              printf '%s\n' "$PERMISSION_ERROR" >&2
+              exit 1
+            fi
           fi
 
           echo "Settlement schedule reconciled: $RULE_NAME"
