@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import nacl from "tweetnacl";
 import { PublicKey } from "@solana/web3.js";
 import { MemoryStore } from "../src/storage.mjs";
-import { createQuestlineClient, participationMessage, questlineConfig, validateAndPushQuest, validateQuestEligibility, verifyWalletSignature } from "../src/questline.mjs";
+import { configuredQuestIds, createQuestlineClient, participationMessage, questlineConfig, readQuestlinePullStatus, validateAndPushQuest, validateQuestEligibility, verifyWalletSignature } from "../src/questline.mjs";
 
 const wallet = new PublicKey(nacl.sign.keyPair.fromSeed(Uint8Array.from({ length: 32 }, (_, i) => i + 1)).publicKey).toBase58();
 const base = { questId: 94, baseUrl: "https://quests.magicblock.app", bearerToken: "test-token", pushPath: "/api/validators/run", pushEnabled: true };
@@ -12,6 +13,11 @@ test("Questline supports a Secrets Manager reference without requiring a plainte
   const config = questlineConfig({ MAGICBLOCK_QUESTLINE_SECRET_ID: "pdao/agent-exchange/questline" });
   assert.equal(config.secretId, "pdao/agent-exchange/questline");
   assert.equal(config.bearerToken, "");
+});
+
+test("Questline configuration supports a stable allowlist for future quest IDs", () => {
+  const config = questlineConfig({ MAGICBLOCK_QUESTLINE_QUEST_ID: "94", MAGICBLOCK_QUESTLINE_QUEST_IDS: "94, 95, 95, bad" });
+  assert.deepEqual([...configuredQuestIds(config)], [94, 95]);
 });
 
 test("Questline can require Secrets Manager before using a bearer token", async () => {
@@ -96,4 +102,17 @@ test("accepts the existing nested PDAO eligibility record shape", async () => {
 test("wallet participation message is deterministic", () => {
   const message = participationMessage({ questId: 94, wallet, nonce: "nonce" });
   assert.match(message, /^PrivateDAO Questline participation: quest=94;wallet=/);
+});
+
+test("Questline Pull returns false before validation and true for a validated completion", async () => {
+  const storage = await records();
+  assert.equal(await readQuestlinePullStatus({ storage, wallet, questId: 94 }), false);
+  await storage.put("QuestlineCompletions", "completion_1", {
+    id: "completion_1",
+    kind: "questline_completion",
+    quest_id: 94,
+    wallet_fingerprint: createHash("sha256").update(wallet).digest("hex").slice(0, 16),
+    state: "validated",
+  });
+  assert.equal(await readQuestlinePullStatus({ storage, wallet, questId: 94 }), true);
 });

@@ -11,8 +11,13 @@ const asText = (value) => String(value ?? "").trim();
 
 export function questlineConfig(env = process.env) {
   const questId = Number(env.MAGICBLOCK_QUESTLINE_QUEST_ID || QUESTLINE_QUEST_ID);
+  const questIds = String(env.MAGICBLOCK_QUESTLINE_QUEST_IDS || questId)
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && value > 0);
   return {
     questId: Number.isInteger(questId) && questId > 0 ? questId : QUESTLINE_QUEST_ID,
+    questIds: [...new Set(questIds.length ? questIds : [QUESTLINE_QUEST_ID])],
     baseUrl: asText(env.MAGICBLOCK_QUESTLINE_BASE_URL).replace(/\/$/, ""),
     bearerToken: asText(env.MAGICBLOCK_QUESTLINE_API_KEY),
     secretId: asText(env.MAGICBLOCK_QUESTLINE_SECRET_ID),
@@ -20,6 +25,13 @@ export function questlineConfig(env = process.env) {
     pushPath: asText(env.MAGICBLOCK_QUESTLINE_PUSH_PATH) || QUESTLINE_PUSH_PATH,
     pushEnabled: env.MAGICBLOCK_QUESTLINE_PUSH_ENABLED === "true",
   };
+}
+
+export function configuredQuestIds(config = questlineConfig()) {
+  const ids = [config.questId, ...(Array.isArray(config.questIds) ? config.questIds : [])]
+    .map(Number)
+    .filter((value) => Number.isInteger(value) && value > 0);
+  return new Set(ids.length ? ids : [QUESTLINE_QUEST_ID]);
 }
 
 export function assertSolanaWallet(wallet) {
@@ -33,6 +45,21 @@ export function assertSolanaWallet(wallet) {
 
 function walletFingerprint(wallet) {
   return createHash("sha256").update(wallet).digest("hex").slice(0, 16);
+}
+
+export async function readQuestlinePullStatus({ storage, wallet, questId = QUESTLINE_QUEST_ID }) {
+  const pubkey = assertSolanaWallet(wallet);
+  if (!storage) throw safeError("QUESTLINE_STORAGE_REQUIRED", "quest validation storage is required", 503);
+  const participation = await storage.get("Registry", `questline_participation_${questId}_${pubkey}`);
+  if (!participation || participation.kind !== "questline_participation" || participation.quest_id !== questId || participation.wallet !== pubkey || !participation.started_at)
+    return false;
+  const fingerprint = walletFingerprint(pubkey);
+  const completions = await storage.list("QuestlineCompletions");
+  return completions.some((item) => item
+    && item.kind === "questline_completion"
+    && item.quest_id === questId
+    && item.wallet_fingerprint === fingerprint
+    && ["validated", "completed"].includes(item.state));
 }
 
 function safeError(code, message, statusCode = 502, details = undefined) {
