@@ -35,27 +35,27 @@ export async function createMagicBlockThrowawayToken(rpcUrl = DEFAULT_MAGICBLOCK
 }
 
 /**
- * Builds the official SDK crank transaction. It never broadcasts and never
- * returns the ephemeral payer secret key.
+ * Builds the official SDK crank transaction for an existing wallet. It never
+ * creates, signs, or broadcasts a customer/agent wallet transaction.
  */
 export async function prepareMagicBlockPrivatePayCrank({
   rpcUrl = DEFAULT_MAGICBLOCK_TEE_RPC,
   authToken = "",
   mint,
   validator,
+  payer,
 } = {}) {
   const mintKey = publicKey(mint, "mint");
   const validatorKey = publicKey(validator, "validator");
+  const payerKey = publicKey(payer, "payer");
   const [transferQueue] = deriveTransferQueue(mintKey, validatorKey);
   const magicFeeVault = magicFeeVaultPdaFromValidator(validatorKey);
-  const payer = Keypair.generate();
   const connection = new Connection(rpcWithToken(rpcUrl, authToken), "confirmed");
   const { context, value } = await connection.getLatestBlockhashAndContext("confirmed");
-  const transaction = new Transaction({ feePayer: payer.publicKey })
-    .add(ensureTransferQueueCrankIx(payer.publicKey, transferQueue, magicFeeVault));
+  const transaction = new Transaction({ feePayer: payerKey })
+    .add(ensureTransferQueueCrankIx(payerKey, transferQueue, magicFeeVault));
   transaction.recentBlockhash = value.blockhash;
   transaction.lastValidBlockHeight = value.lastValidBlockHeight;
-  transaction.sign(payer);
 
   return {
     status: "prepared",
@@ -65,7 +65,7 @@ export async function prepareMagicBlockPrivatePayCrank({
     validator: validatorKey.toBase58(),
     transferQueue: transferQueue.toBase58(),
     magicFeeVault: magicFeeVault.toBase58(),
-    payer: payer.publicKey.toBase58(),
+    payer: payerKey.toBase58(),
     blockhashContextSlot: context.slot,
     recentBlockhash: value.blockhash,
     lastValidBlockHeight: value.lastValidBlockHeight,
