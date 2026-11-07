@@ -287,11 +287,13 @@ jobs:
             --output text)"
           test -n "$API_ID" && test "$API_ID" != "None"
 
-          FUNCTION_ARN="$(aws lambda get-function \
-            --function-name "$FUNCTION_NAME:$DEPLOYED_VERSION" \
+          BASE_FUNCTION_ARN="$(aws lambda get-function \
+            --function-name "$FUNCTION_NAME" \
             --region "$AWS_REGION" \
             --query 'Configuration.FunctionArn' \
             --output text)"
+          test -n "$BASE_FUNCTION_ARN" && test "$BASE_FUNCTION_ARN" != "None"
+          FUNCTION_ARN="${BASE_FUNCTION_ARN}:${DEPLOYED_VERSION}"
           INTEGRATION_URI="arn:aws:apigateway:${AWS_REGION}:lambda:path/2015-03-31/functions/${FUNCTION_ARN}/invocations"
 
           ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
