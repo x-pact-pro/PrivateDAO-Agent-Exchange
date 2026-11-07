@@ -53,6 +53,8 @@ const config = getConfig();
 const privatePayReadiness = () => process.env.AGENT_EXCHANGE_TEST_MODE === "true"
   ? Promise.resolve(privatePayStatus(config))
   : probePrivatePayRail(config);
+const privatePayBalancePreflightEnabled = () => process.env.AGENT_EXCHANGE_TEST_MODE !== "true"
+  || process.env.PRIVATEPAY_BALANCE_PREFLIGHT === "true";
 let storePromise;
 let configPromise;
 const store = () => (storePromise ||= createStore(config));
@@ -745,7 +747,6 @@ function card() {
       pdaoUtility: PDAO_UTILITY,
       paymentRail: "USDC on Solana Mainnet for ordinary paid services; eligible token-holder access requires a wallet signature and sends no transaction",
     },
-    commercialMessaging: PDAO_UTILITY.commercial_messaging,
     agentGuidance: "Use pdao_services to inspect the catalog, service_recommendation to map a task to a service, and provider_integrations to understand evidence sources. Free jobs execute immediately; paid jobs return a quote and payment_intent before any execution.",
     workflow: {
       discovery: `GET https://${config.domain}/.well-known/agent-card.json`,
@@ -1149,8 +1150,8 @@ function acquisition() {
       solanaAgentRegistryRegistration: `https://${config.domain}/agent-registry/register`,
     },
     sdk: {
-      typescript: "https://github.com/X-PACT/PrivateDAO/tree/codex/agent-exchange-acquisition/sdk/agent-exchange/typescript",
-      python: "https://github.com/X-PACT/PrivateDAO/tree/codex/agent-exchange-acquisition/sdk/agent-exchange/python",
+      typescript: `https://${config.domain}/connect`,
+      python: `https://${config.domain}/connect`,
       examples: `https://${config.domain}/connect`,
     },
     receipts: {
@@ -1168,7 +1169,7 @@ function acquisition() {
       { id: "a2a-registry", protocol: "A2A", status: "registered-recheck-pending", url: "https://a2aregistry.org/api/agents/6ebd2b6c-2cef-4421-8f28-6896ca3bf307", note: "Registry cache must recheck the updated card; no duplicate entry is created." },
       { id: "solana-agent-registry", protocol: "A2A", status: "submission-ready", auth: "manual or registry-specific" },
       { id: "8004scan", protocol: "agent-discovery", status: "submission-ready", auth: "directory policy applies" },
-      { id: "github-action", protocol: "GitHub Actions", status: "source-ready", url: "https://github.com/X-PACT/PrivateDAO/tree/codex/agent-exchange-acquisition/integrations/pdao-token-verification-action" },
+      { id: "github", protocol: "GitHub", status: "source-of-truth", url: "https://github.com/x-pact-pro/PrivateDAO-Agent-Exchange" },
     ],
     policy: "opt-in distribution; no fabricated activity or unsolicited messaging",
   };
@@ -1775,6 +1776,7 @@ const privatePayAmount=document.querySelector('#privatePayAmount');
 const privatePayStatus=document.querySelector('#servicePaymentStatus');
 let privatePayWallet=null;
 let privatePayPayer='';
+let privatePayBalance=null;
 const privatePayProvider=()=>window.solflare?.solana||window.solflare||window.phantom?.solana||window.phantom||window.solana;
 const privatePayAddress=value=>{const key=value?.publicKey||value?.account?.address||value?.accounts?.[0]?.address;return typeof key==='string'?key:key?.toBase58?.()||key?.toString?.()||''};
 const privatePayEncode=bytes=>{let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'')};
@@ -1790,7 +1792,17 @@ async function connectPrivatePayWallet(){
   if(!privatePayPayer)throw Error('Wallet connected but did not return a public Solana address. Unlock the wallet and try again.');
   privatePayWallet=wallet;
   privatePayButton.textContent='Request payment';
-  privatePayStatus.textContent='Wallet connected: '+privatePayPayer+'\\nNo transaction has been signed.';
+  privatePayStatus.textContent='Wallet connected. Reading finalized Mainnet balances…';
+  try{
+    const balanceResponse=await fetch('/api/privatepay/wallet-balance?wallet='+encodeURIComponent(privatePayPayer),{cache:'no-store'});
+    const balance=await balanceResponse.json().catch(()=>({}));
+    if(!balanceResponse.ok)throw new Error(balance.message||balance.error||'balance lookup failed');
+    privatePayBalance={usdc:Number(balance.usdc?.ui_amount||0),sol:Number(balance.sol?.ui_amount||0)};
+    privatePayStatus.textContent='Wallet connected: '+privatePayPayer+'\\nUSDC '+privatePayBalance.usdc.toFixed(6)+' · SOL '+privatePayBalance.sol.toFixed(6)+'\\nNo transaction has been signed.';
+  }catch(error){
+    privatePayBalance=null;
+    privatePayStatus.textContent='Wallet connected: '+privatePayPayer+'\\nBalance preflight unavailable: '+(error.message||String(error))+'\\nNo transaction has been signed.';
+  }
 }
 async function requestPrivatePay(){
   if(!privatePayWallet||!privatePayPayer)return connectPrivatePayWallet();
@@ -1798,13 +1810,19 @@ async function requestPrivatePay(){
   try{
     const privatePayAttempt=crypto.randomUUID();
     const amountBaseUnits=privatePayUnits();
+    if(privatePayBalance && privatePayBalance.usdc < Number(amountBaseUnits)/1000000)
+      throw Error('This wallet does not have enough Mainnet USDC for the requested payment. No transaction was signed.');
     privatePayStatus.textContent='Requesting an exact MagicBlock x402 challenge…';
     const resource=location.origin+'/services/privatepay-x402';
     const first=await fetch('/api/privatepay/x402',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({payer:privatePayPayer,resource,provider_id:'privatepay.x402',amount_base_units:amountBaseUnits,nonce:privatePayAttempt,external_reference:'privatepay-ui-'+privatePayAttempt,pdao_optional:true})});
     const firstBody=await first.json().catch(()=>({}));
     const requiredHeader=first.headers.get('PAYMENT-REQUIRED');
     if(first.status!==402||!requiredHeader){
-      const reason=firstBody.code==='PRIVATEPAY_CHECKOUT_DISABLED'?'Merchant checkout is not activated on the production rail yet.':(firstBody.message||firstBody.error||'MagicBlock payment challenge unavailable');
+      const reason=first.status===409
+        ? 'MagicBlock rejected the checkout challenge for this payer (409). No transaction was signed. Confirm this wallet has Mainnet USDC and an initialized/delegated private USDC account, then start a fresh checkout. Do not retry the same checkout repeatedly.'
+        : firstBody.code==='PRIVATEPAY_CHECKOUT_DISABLED'
+          ? 'Merchant checkout is not activated on the production rail yet.'
+          : (firstBody.message||firstBody.error||'MagicBlock payment challenge unavailable');
       throw Error(reason);
     }
     const required=JSON.parse(new TextDecoder().decode(privatePayDecode(requiredHeader))),accepted=required.accepts?.[0],raw=accepted?.extra?.transaction;
@@ -5776,6 +5794,20 @@ async function handle(e) {
       pdao_selected: requirements.pdao.selected === true,
       pdao_fee_base_units: requirements.pdao.selected === true ? String(requirements.pdao.fee_base_units || "") : null,
     };
+    const paymentSignature = e.headers?.["PAYMENT-SIGNATURE"] || e.headers?.["payment-signature"];
+    if (!paymentSignature && privatePayBalancePreflightEnabled()) {
+      const payerBalance = await readPrivatePayWalletBalance(checkoutBinding.payer);
+      const quotedUsdc = BigInt(checkoutBinding.amount_base_units);
+      const availableUsdc = BigInt(payerBalance.usdc?.base_units || "0");
+      if (availableUsdc < quotedUsdc) {
+        throw Object.assign(new Error("payer wallet has insufficient Mainnet USDC for this checkout; no payment was created"), {
+          statusCode: 402,
+          code: "PRIVATEPAY_PAYER_USDC_INSUFFICIENT",
+          available_base_units: availableUsdc.toString(),
+          required_base_units: quotedUsdc.toString(),
+        });
+      }
+    }
     const bindingMatches = (record) => record
       && record.payer === checkoutBinding.payer
       && record.resource === checkoutBinding.resource
@@ -5797,7 +5829,6 @@ async function handle(e) {
     };
     const checkoutTerminal = (record) => ["paid", "settled", "expired", "failed", "settlement_failed"].includes(record?.state);
     const reusableCheckout = (record) => Boolean(record?.payment_id && !checkoutTerminal(record) && !checkoutExpired(record));
-    const paymentSignature = e.headers?.["PAYMENT-SIGNATURE"] || e.headers?.["payment-signature"];
     if (!paymentSignature) {
       const suppliedPaymentId = String(x402Input.payment_id || x402Input.paymentId || "").trim();
       const paymentKey = suppliedPaymentId ? `privatepay_checkout_${suppliedPaymentId}` : null;
