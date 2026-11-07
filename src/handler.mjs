@@ -1723,7 +1723,9 @@ function privatePayCheckoutPage() {
 const button=document.querySelector('#privatePayPay'),amount=document.querySelector('#privatePayAmount'),status=document.querySelector('#servicePaymentStatus'),walletBox=document.querySelector('#privatePayWallets'),balanceBox=document.querySelector('#privatePayWalletBalance');
 const resource=location.origin+'/services/privatepay-x402',providerId='privatepay.x402';
 const units=()=>{const value=Number(String(amount.value).trim());if(!Number.isFinite(value)||value<=0)throw Error('Enter a positive USDC amount');return String(Math.round(value*1000000))};
-const encode=bytes=>{let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'')};
+// MagicBlock x402 payment payloads require standard Base64. Base64URL
+// changes the signed bytes and causes facilitator verify to return 400.
+const encode=bytes=>{let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary)};
 const decode=value=>{const text=String(value),padded=text.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-text.length%4)%4);return Uint8Array.from(atob(padded),c=>c.charCodeAt(0))};
 const timeout=(promise,ms)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error('wallet connection timed out')),ms))]);
 const publicKeyOf=value=>{const key=value?.publicKey||value?.account?.address||value?.accounts?.[0]?.address;return typeof key==='string'?key:key?.toBase58?.()||key?.toString?.()||''};
@@ -1783,6 +1785,9 @@ let privatePayPayer='';
 let privatePayBalance=null;
 const privatePayProvider=()=>window.solflare?.solana||window.solflare||window.phantom?.solana||window.phantom||window.solana;
 const privatePayAddress=value=>{const key=value?.publicKey||value?.account?.address||value?.accounts?.[0]?.address;return typeof key==='string'?key:key?.toBase58?.()||key?.toString?.()||''};
+// MagicBlock's x402 transaction and PAYMENT-SIGNATURE payloads use standard
+// Base64. The server decoder accepts the provider's PAYMENT-REQUIRED header
+// encoding separately; do not send the signed payment as Base64URL.
 const privatePayEncode=bytes=>{let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary)};
 const privatePayDecode=value=>{const text=String(value),padded=text.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-text.length%4)%4);return Uint8Array.from(atob(padded),c=>c.charCodeAt(0))};
 const privatePayUnits=()=>{const value=Number(String(privatePayAmount.value).trim());if(!Number.isFinite(value)||value<=0)throw Error('Enter a positive USDC amount');return String(Math.round(value*1000000))};

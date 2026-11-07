@@ -63,6 +63,8 @@ test("PrivatePAY product page separates free demo, live pricing, privacy scope, 
   assert.match(response.body, /wallet-standard:register-wallet/);
   assert.match(response.body, /VersionedTransaction\.deserialize/);
   assert.match(response.body, /Transaction\.from/);
+  assert.match(response.body, /const encode=.*return btoa\(binary\)}/);
+  assert.doesNotMatch(response.body, /const encode=.*replace\(\/\\\\\+\/g,'-'\)/);
   assert.match(response.body, /checkoutNonce=crypto\.randomUUID\(\)/);
   assert.match(response.body, /nonce:checkoutNonce/);
   assert.match(response.body, /PDAO benefits remain optional/);
