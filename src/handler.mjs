@@ -1150,8 +1150,8 @@ function acquisition() {
       solanaAgentRegistryRegistration: `https://${config.domain}/agent-registry/register`,
     },
     sdk: {
-      typescript: "https://github.com/X-PACT/PrivateDAO/tree/codex/agent-exchange-acquisition/sdk/agent-exchange/typescript",
-      python: "https://github.com/X-PACT/PrivateDAO/tree/codex/agent-exchange-acquisition/sdk/agent-exchange/python",
+      typescript: `https://${config.domain}/connect`,
+      python: `https://${config.domain}/connect`,
       examples: `https://${config.domain}/connect`,
     },
     receipts: {
@@ -1169,7 +1169,7 @@ function acquisition() {
       { id: "a2a-registry", protocol: "A2A", status: "registered-recheck-pending", url: "https://a2aregistry.org/api/agents/6ebd2b6c-2cef-4421-8f28-6896ca3bf307", note: "Registry cache must recheck the updated card; no duplicate entry is created." },
       { id: "solana-agent-registry", protocol: "A2A", status: "submission-ready", auth: "manual or registry-specific" },
       { id: "8004scan", protocol: "agent-discovery", status: "submission-ready", auth: "directory policy applies" },
-      { id: "github-action", protocol: "GitHub Actions", status: "source-ready", url: "https://github.com/X-PACT/PrivateDAO/tree/codex/agent-exchange-acquisition/integrations/pdao-token-verification-action" },
+      { id: "github", protocol: "GitHub", status: "source-of-truth", url: "https://github.com/x-pact-pro/PrivateDAO-Agent-Exchange" },
     ],
     policy: "opt-in distribution; no fabricated activity or unsolicited messaging",
   };
