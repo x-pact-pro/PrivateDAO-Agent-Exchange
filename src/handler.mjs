@@ -46,7 +46,7 @@ import { buildPrivatePayPdaoFeeTransaction, createPrivatePayChallenge, createPri
 import { authorizePrivatePayAutopilotOperation, cancelPrivatePayAutopilotOperation, completePrivatePayAutopilotOperation, createPrivatePayAutopilotChallenge, createPrivatePayAutopilotOperationChallenge, createPrivatePayAutopilotPolicy, privatePayAutopilotStatus, revokePrivatePayAutopilotPolicy, validatePrivatePayAutopilotOperation } from "./privatepay-autopilot.mjs";
 import { handleAlibabaSpi } from "./alibaba-marketplace.mjs";
 import { encodePaymentResponseHeader } from "@x402/core/http";
-import { createQuestlineClient, participationMessage, validateAndPushQuest, assertSolanaWallet, verifyWalletSignature } from "./questline.mjs";
+import { configuredQuestIds, createQuestlineClient, participationMessage, readQuestlinePullStatus, validateAndPushQuest, assertSolanaWallet, verifyWalletSignature } from "./questline.mjs";
 import { commercePricingForExistingQuote } from "./commerce-pricing.mjs";
 
 const config = getConfig();
@@ -1002,6 +1002,7 @@ function openapi() {
     "/api/treasury/status": { get: { operationId: "treasuryStatus" } },
     "/api/providers/status": { get: { operationId: "providerStatus" } },
     "/api/integrations": { get: { operationId: "integrations" } },
+    "/api/questline/{questId}/status": { get: { operationId: "questlinePullStatus", summary: "Read Questline completion", description: "Read-only MagicBlock Pull validation. Returns a JSON boolean and never exposes job IDs, payment details, credentials, or wallet private data.", parameters: [{ name: "questId", in: "path", required: true, schema: { type: "integer", minimum: 1 } }, { name: "user", in: "query", required: true, schema: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" } }], responses: { "200": { description: "JSON boolean: true only for a validated or completed Questline record" }, "400": { description: "Invalid Solana wallet" }, "404": { description: "Quest is not configured" } } } },
     "/api/privatepay/status": { get: { operationId: "privatePayStatus", summary: "Read PrivatePAY readiness", description: "Read-only, fail-closed status for the Solana Mainnet PrivatePAY x402 rail, MagicBlock private settlement, PDAO entry rule, fees, and privacy boundary.", responses: { "200": { description: "Current readiness and privacy status", content: { "application/json": { schema: privatePayResponse } } } } } },
     "/api/privatepay/wallet-balance": { get: { operationId: "privatePayWalletBalance", summary: "Read wallet balances", description: "Read-only Solana Mainnet balance lookup for the connected public wallet. No signature, payment, or private key is requested.", parameters: [{ name: "wallet", in: "query", required: true, schema: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" } }], responses: { "200": { description: "SOL, USDC, and PDAO balances" }, "400": { description: "Invalid wallet" }, "503": { description: "RPC unavailable" } } } },
     "/api/privatepay/autopilot/status": { get: { operationId: "privatePayAutopilotStatus", summary: "Read Autopilot status", description: "Read-only status for bounded PrivatePAY Autopilot policies. Delegated agent-session custody, explicit target allowlists, limits, and activation state are returned; reusable x402 credentials are never enabled.", responses: { "200": { description: "Autopilot configuration status", content: { "application/json": { schema: privatePayResponse } } } } } },
@@ -5304,11 +5305,19 @@ function requestHeader(event, name) {
   return Object.entries(headers).find(([key]) => String(key).toLowerCase() === target)?.[1] || "";
 }
 
-async function questlineRoute(path, method, body) {
+async function questlineRoute(path, method, body, query = {}) {
+  const statusMatch = path.match(/^\/api\/questline\/(\d+)\/status$/);
+  if (method === "GET" && statusMatch) {
+    const questId = Number(statusMatch[1]);
+    if (!Number.isInteger(questId) || !configuredQuestIds(config.questline).has(questId))
+      throw Object.assign(new Error("quest is not configured"), { statusCode: 404, code: "QUESTLINE_QUEST_NOT_CONFIGURED" });
+    const wallet = assertSolanaWallet(query.user || query.wallet);
+    return json(await readQuestlinePullStatus({ storage: await store(), wallet, questId }));
+  }
   const match = path.match(/^\/api\/questline\/(\d+)\/(participation\/challenge|participation|complete)$/);
   if (method !== "POST" || !match) return null;
   const questId = Number(match[1]);
-  if (!Number.isInteger(questId) || questId !== Number(config.questline.questId || 94))
+  if (!Number.isInteger(questId) || !configuredQuestIds(config.questline).has(questId))
     throw Object.assign(new Error("quest is not configured"), { statusCode: 404, code: "QUESTLINE_QUEST_NOT_CONFIGURED" });
   const action = match[2];
   const storage = await store();
@@ -5334,7 +5343,7 @@ async function questlineRoute(path, method, body) {
   const result = await validateAndPushQuest({
     storage,
     client: createQuestlineClient({ config: config.questline, logger: (entry) => console.info(JSON.stringify(entry)) }),
-    config: config.questline,
+    config: { ...config.questline, questId },
     wallet,
     participationId: body.participation_id,
     freeJobId: body.free_job_id,
@@ -5368,7 +5377,7 @@ async function handle(e) {
     path = pathOf(e),
     body = method === "GET" ? {} : parseBody(e);
   if (method === "OPTIONS") return json({}, 204);
-  const questlineResponse = await questlineRoute(path, method, body);
+  const questlineResponse = await questlineRoute(path, method, body, e.queryStringParameters || {});
   if (questlineResponse) return questlineResponse;
   if ((method === "GET" || method === "POST") && path === "/api/alibaba/spi") {
     if (!config.alibabaMarketplaceEnabled) return json({ error: "not_found" }, 404);

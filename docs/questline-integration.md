@@ -2,9 +2,25 @@
 
 Quest 94 is exposed through the Agent Exchange Lambda at:
 
+- `GET /api/questline/94/status?user={SOLANA_PUBKEY}`
 - `POST /api/questline/94/participation/challenge`
 - `POST /api/questline/94/participation`
 - `POST /api/questline/94/complete`
+
+MagicBlock Questline should use the read-only Pull endpoint above. It returns a
+JSON boolean: `true` only after the server has stored a validated or completed
+Questline record for the participating wallet, otherwise `false`. It does not
+accept credentials, expose job identifiers, or perform writes. The endpoint is
+safe to poll and is the preferred integration over server-side Push.
+
+The route is stable for future quests: add their numeric IDs to the deployment
+configuration variable `MAGICBLOCK_QUESTLINE_QUEST_IDS`, for example `94,95,96`.
+The same route shape then applies to each quest:
+`/api/questline/{questId}/status?user={SOLANA_PUBKEY}`.
+
+The Push Bearer credential shown in the MagicBlock console is not needed by
+Pull. Treat any credential visible in a screenshot or chat as compromised and
+rotate it in the provider and Secrets Manager before using Push again.
 
 The participation endpoint requires a wallet signature over the server-issued challenge. Completion is accepted only when the server finds:
 

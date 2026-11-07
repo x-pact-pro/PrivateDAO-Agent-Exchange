@@ -197,6 +197,7 @@ export function getConfig(env = process.env) {
     privatePayAutopilotEnabled: bool(env.PRIVATEPAY_AUTOPILOT_ENABLED),
     questline: {
       questId: Number(env.MAGICBLOCK_QUESTLINE_QUEST_ID || 94),
+      questIds: String(env.MAGICBLOCK_QUESTLINE_QUEST_IDS || env.MAGICBLOCK_QUESTLINE_QUEST_ID || 94).split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0),
       baseUrl: env.MAGICBLOCK_QUESTLINE_BASE_URL || "",
       bearerToken: env.MAGICBLOCK_QUESTLINE_API_KEY || "",
       secretId: env.MAGICBLOCK_QUESTLINE_SECRET_ID || "",
@@ -286,6 +287,7 @@ export async function hydrateConfig(config, env = process.env) {
       if (values.MAGICBLOCK_QUESTLINE_API_KEY || values.QUESTLINE_API_KEY) config.questline.bearerToken = values.MAGICBLOCK_QUESTLINE_API_KEY || values.QUESTLINE_API_KEY;
       if (values.MAGICBLOCK_QUESTLINE_BASE_URL) config.questline.baseUrl = values.MAGICBLOCK_QUESTLINE_BASE_URL;
       if (values.MAGICBLOCK_QUESTLINE_QUEST_ID) config.questline.questId = Number(values.MAGICBLOCK_QUESTLINE_QUEST_ID);
+      if (values.MAGICBLOCK_QUESTLINE_QUEST_IDS) config.questline.questIds = String(values.MAGICBLOCK_QUESTLINE_QUEST_IDS).split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0);
       if (values.MAGICBLOCK_QUESTLINE_PUSH_PATH) config.questline.pushPath = values.MAGICBLOCK_QUESTLINE_PUSH_PATH;
       if (values.MAGICBLOCK_QUESTLINE_PUSH_ENABLED != null) config.questline.pushEnabled = bool(values.MAGICBLOCK_QUESTLINE_PUSH_ENABLED);
     }],
