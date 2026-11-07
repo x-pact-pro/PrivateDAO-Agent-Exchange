@@ -5838,7 +5838,8 @@ async function handle(e) {
         throw Object.assign(new Error("payment_id is not bound to this payer, resource, provider, and amount"), { statusCode: 409, code: "PRIVATEPAY_CHECKOUT_BINDING_MISMATCH" });
       if (suppliedPaymentId && suppliedRecord?.state === "paid")
         throw Object.assign(new Error("this PrivatePAY checkout was already paid"), { statusCode: 409, code: "PRIVATEPAY_CHECKOUT_ALREADY_PAID" });
-      if (suppliedPaymentId && suppliedRecord && !reusableCheckout(suppliedRecord))
+      const challengeFailed = requestRecord?.state === "challenge_failed" || suppliedRecord?.state === "challenge_failed";
+      if (suppliedPaymentId && suppliedRecord && !reusableCheckout(suppliedRecord) && suppliedRecord.state !== "challenge_failed")
         throw Object.assign(new Error("this PrivatePAY checkout has expired; generate a fresh checkout"), { statusCode: 409, code: "PRIVATEPAY_CHECKOUT_EXPIRED" });
       if (requestRecord && !bindingMatches(requestRecord))
         throw Object.assign(new Error("existing PrivatePAY checkout binding does not match this request"), { statusCode: 409, code: "PRIVATEPAY_CHECKOUT_BINDING_MISMATCH" });
@@ -5846,11 +5847,11 @@ async function handle(e) {
         throw Object.assign(new Error("this PrivatePAY checkout was already paid"), { statusCode: 409, code: "PRIVATEPAY_CHECKOUT_ALREADY_PAID" });
       // A pending response carries the provider payment id. Reusing it must
       // resume the same checkout instead of creating a second charge.
-      const existingPaymentId = suppliedPaymentId || (reusableCheckout(requestRecord) ? requestRecord.payment_id : "");
+      const existingPaymentId = challengeFailed ? "" : (suppliedPaymentId || (reusableCheckout(requestRecord) ? requestRecord.payment_id : ""));
       const suppliedExternalReference = String(x402Input.external_reference || x402Input.externalReference || "").trim();
       const deterministicExternalReference = `privatepay-x402-${digest(checkoutIdentity).slice(0, 32)}`;
       const externalReference = suppliedExternalReference
-        || (requestRecord?.state === "challenge_failed"
+        || (challengeFailed
           ? `${deterministicExternalReference}-${randomUUID()}`
           : deterministicExternalReference);
       let checkout;

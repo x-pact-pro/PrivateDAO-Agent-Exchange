@@ -571,6 +571,50 @@ test("generic PrivatePAY x402 recovers a MagicBlock checkout 409 with a fresh ch
   }
 });
 
+test("generic PrivatePAY x402 recovers when the retry includes the failed payment id", async () => {
+  const originalFetch = globalThis.fetch;
+  let checkoutCreates = 0;
+  const externalReferences = [];
+  const paymentIds = ["d", "e"].map((value) => value.repeat(64));
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.endsWith("/v1/payments")) {
+      const payload = JSON.parse(init.body || "{}");
+      externalReferences.push(payload.externalReference);
+      const paymentId = paymentIds[checkoutCreates];
+      checkoutCreates += 1;
+      return new Response(JSON.stringify({ id: paymentId, status: "created" }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (target.includes("/v1/x402/payments/") && target.endsWith("/pay")) {
+      if (checkoutCreates === 1) return new Response(JSON.stringify({ error: { code: "order_conflict" } }), { status: 409, headers: { "content-type": "application/json" } });
+      const accepted = {
+        scheme: "exact-magicblock",
+        network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        amount: "1000",
+        payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
+        maxTimeoutSeconds: 60,
+        extra: { paymentId: paymentIds[1], cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+      };
+      return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "https://agents.example/api/retry-with-id" }, accepts: [accepted] }) } });
+    }
+    throw new Error(`unexpected fixture request: ${target}`);
+  };
+  try {
+    resetForTests();
+    const input = { payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6", resource: "https://agents.example/api/retry-with-id", provider_id: "provider-1", amount_base_units: "1000", nonce: "retryable-409-with-id" };
+    const failed = await request("/api/privatepay/x402", "POST", input);
+    assert.equal(failed.statusCode, 409);
+    const retry = await request("/api/privatepay/x402", "POST", { ...input, payment_id: paymentIds[0] });
+    assert.equal(retry.statusCode, 402);
+    assert.equal(JSON.parse(retry.body).payment_id, paymentIds[1]);
+    assert.equal(checkoutCreates, 2);
+    assert.notEqual(externalReferences[0], externalReferences[1]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("generic PrivatePAY x402 resumes a pending checkout by payment id", async () => {
   const originalFetch = globalThis.fetch;
   let checkoutCreates = 0;
