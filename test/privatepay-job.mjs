@@ -558,9 +558,6 @@ test("generic PrivatePAY x402 recovers a MagicBlock checkout 409 with a fresh ch
   try {
     resetForTests();
     const input = { payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6", resource: "https://agents.example/api/retry", provider_id: "provider-1", amount_base_units: "1000", nonce: "retryable-409" };
-    const failed = await request("/api/privatepay/x402", "POST", input);
-    assert.equal(failed.statusCode, 409);
-    assert.equal(JSON.parse(failed.body).code, "PRIVATEPAY_CHECKOUT_RETRYABLE_CONFLICT");
     const recovered = await request("/api/privatepay/x402", "POST", input);
     assert.equal(recovered.statusCode, 402);
     assert.equal(JSON.parse(recovered.body).payment_id, "c".repeat(64));
@@ -574,8 +571,9 @@ test("generic PrivatePAY x402 recovers a MagicBlock checkout 409 with a fresh ch
 test("generic PrivatePAY x402 recovers when the retry includes the failed payment id", async () => {
   const originalFetch = globalThis.fetch;
   let checkoutCreates = 0;
+  let challengeAttempts = 0;
   const externalReferences = [];
-  const paymentIds = ["d", "e"].map((value) => value.repeat(64));
+  const paymentIds = ["d", "e", "f"].map((value) => value.repeat(64));
   globalThis.fetch = async (url, init = {}) => {
     const target = String(url);
     if (target.endsWith("/v1/payments")) {
@@ -586,7 +584,8 @@ test("generic PrivatePAY x402 recovers when the retry includes the failed paymen
       return new Response(JSON.stringify({ id: paymentId, status: "created" }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (target.includes("/v1/x402/payments/") && target.endsWith("/pay")) {
-      if (checkoutCreates === 1) return new Response(JSON.stringify({ error: { code: "order_conflict" } }), { status: 409, headers: { "content-type": "application/json" } });
+      challengeAttempts += 1;
+      if (challengeAttempts <= 2) return new Response(JSON.stringify({ error: { code: "order_conflict" } }), { status: 409, headers: { "content-type": "application/json" } });
       const accepted = {
         scheme: "exact-magicblock",
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
@@ -594,7 +593,7 @@ test("generic PrivatePAY x402 recovers when the retry includes the failed paymen
         amount: "1000",
         payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
-        extra: { paymentId: paymentIds[1], cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+        extra: { paymentId: paymentIds[2], cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
       return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "https://agents.example/api/retry-with-id" }, accepts: [accepted] }) } });
     }
@@ -607,9 +606,10 @@ test("generic PrivatePAY x402 recovers when the retry includes the failed paymen
     assert.equal(failed.statusCode, 409);
     const retry = await request("/api/privatepay/x402", "POST", { ...input, payment_id: paymentIds[0] });
     assert.equal(retry.statusCode, 402);
-    assert.equal(JSON.parse(retry.body).payment_id, paymentIds[1]);
-    assert.equal(checkoutCreates, 2);
+    assert.equal(JSON.parse(retry.body).payment_id, paymentIds[2]);
+    assert.equal(checkoutCreates, 3);
     assert.notEqual(externalReferences[0], externalReferences[1]);
+    assert.notEqual(externalReferences[1], externalReferences[2]);
   } finally {
     globalThis.fetch = originalFetch;
   }

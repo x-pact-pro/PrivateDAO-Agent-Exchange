@@ -5850,7 +5850,7 @@ async function handle(e) {
       const existingPaymentId = challengeFailed ? "" : (suppliedPaymentId || (reusableCheckout(requestRecord) ? requestRecord.payment_id : ""));
       const suppliedExternalReference = String(x402Input.external_reference || x402Input.externalReference || "").trim();
       const deterministicExternalReference = `privatepay-x402-${digest(checkoutIdentity).slice(0, 32)}`;
-      const externalReference = suppliedExternalReference
+      let externalReference = suppliedExternalReference
         || (challengeFailed
           ? `${deterministicExternalReference}-${randomUUID()}`
           : deterministicExternalReference);
@@ -5887,7 +5887,7 @@ async function handle(e) {
         });
       }
       const localExpiry = checkout.expires_at || new Date(Date.now() + Math.min(86400, Math.max(60, Number(x402Input.expires_in_seconds || 3600))) * 1000).toISOString();
-      const nextBinding = { ...checkoutBinding, payment_id: checkout.payment_id, external_reference: externalReference, checkout_expires_at: localExpiry, state: "checkout_created", updated_at: now() };
+      let nextBinding = { ...checkoutBinding, payment_id: checkout.payment_id, external_reference: externalReference, checkout_expires_at: localExpiry, state: "checkout_created", updated_at: now() };
       await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, nextBinding);
       await checkoutStore.put("Payments", requestKey, nextBinding);
       if (checkout.status === "pending")
@@ -5900,14 +5900,43 @@ async function handle(e) {
           const failedBinding = { ...nextBinding, state: "challenge_failed", challenge_failed_at: now(), updated_at: now() };
           await checkoutStore.put("Payments", requestKey, failedBinding);
           await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, failedBinding);
-          throw Object.assign(new Error("MagicBlock checkout conflict; retry to create a fresh payment challenge"), {
-            statusCode: 409,
-            code: "PRIVATEPAY_CHECKOUT_RETRYABLE_CONFLICT",
-            retryable: true,
-            retryAfterSeconds: 1,
+          // MagicBlock can reject the first challenge after creating the
+          // checkout. Recover once in the same request so the customer sees a
+          // normal x402 challenge instead of an avoidable 409.
+          externalReference = `${deterministicExternalReference}-${randomUUID()}`;
+          checkout = await createPrivatePayCheckout(config, {
+            payer: x402Input.payer,
+            resource: x402Input.resource,
+            amount_base_units: x402Input.amount_base_units,
+            description: x402Input.description || "PrivateDAO Agent Exchange service payment",
+            external_reference: externalReference,
+            expires_in_seconds: x402Input.expires_in_seconds,
           });
+          const retryExpiry = checkout.expires_at || new Date(Date.now() + Math.min(86400, Math.max(60, Number(x402Input.expires_in_seconds || 3600))) * 1000).toISOString();
+          nextBinding = { ...checkoutBinding, payment_id: checkout.payment_id, external_reference: externalReference, checkout_expires_at: retryExpiry, state: "checkout_created", updated_at: now() };
+          await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, nextBinding);
+          await checkoutStore.put("Payments", requestKey, nextBinding);
+          if (checkout.status === "pending")
+            return json({ error: "payment_pending", payment_id: checkout.payment_id, status: "pending", retry_after_seconds: 2 }, 202, { "retry-after": "2" });
+          try {
+            challenge = await requestPrivatePayCheckoutChallenge(config, { payment_id: checkout.payment_id });
+          } catch (retryError) {
+            if (retryError?.code === "PRIVATEPAY_CHALLENGE_REJECTED" && retryError?.statusCode === 409) {
+              const retryFailedBinding = { ...nextBinding, state: "challenge_failed", challenge_failed_at: now(), updated_at: now() };
+              await checkoutStore.put("Payments", requestKey, retryFailedBinding);
+              await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, retryFailedBinding);
+              throw Object.assign(new Error("MagicBlock checkout conflict; retry to create a fresh payment challenge"), {
+                statusCode: 409,
+                code: "PRIVATEPAY_CHECKOUT_RETRYABLE_CONFLICT",
+                retryable: true,
+                retryAfterSeconds: 1,
+              });
+            }
+            throw retryError;
+          }
+        } else {
+          throw error;
         }
-        throw error;
       }
       if (challenge.status === "pending")
         return json({ error: "payment_pending", payment_id: checkout.payment_id, status: "pending", retry_after_seconds: challenge.retry_after_seconds || 2 }, 202, { "retry-after": String(challenge.retry_after_seconds || 2) });
