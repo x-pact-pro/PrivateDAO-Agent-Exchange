@@ -5827,7 +5827,7 @@ async function handle(e) {
       const expiry = record?.checkout_expires_at || record?.expires_at;
       return Boolean(expiry && Date.parse(expiry) <= Date.now());
     };
-    const checkoutTerminal = (record) => ["paid", "settled", "expired", "failed", "settlement_failed"].includes(record?.state);
+    const checkoutTerminal = (record) => ["paid", "settled", "expired", "failed", "settlement_failed", "challenge_failed"].includes(record?.state);
     const reusableCheckout = (record) => Boolean(record?.payment_id && !checkoutTerminal(record) && !checkoutExpired(record));
     if (!paymentSignature) {
       const suppliedPaymentId = String(x402Input.payment_id || x402Input.paymentId || "").trim();
@@ -5847,8 +5847,12 @@ async function handle(e) {
       // A pending response carries the provider payment id. Reusing it must
       // resume the same checkout instead of creating a second charge.
       const existingPaymentId = suppliedPaymentId || (reusableCheckout(requestRecord) ? requestRecord.payment_id : "");
-      const externalReference = String(x402Input.external_reference || x402Input.externalReference || "").trim()
-        || `privatepay-x402-${digest(checkoutIdentity).slice(0, 32)}`;
+      const suppliedExternalReference = String(x402Input.external_reference || x402Input.externalReference || "").trim();
+      const deterministicExternalReference = `privatepay-x402-${digest(checkoutIdentity).slice(0, 32)}`;
+      const externalReference = suppliedExternalReference
+        || (requestRecord?.state === "challenge_failed"
+          ? `${deterministicExternalReference}-${randomUUID()}`
+          : deterministicExternalReference);
       let checkout;
       let storedBinding;
       if (existingPaymentId) {
@@ -5887,7 +5891,23 @@ async function handle(e) {
       await checkoutStore.put("Payments", requestKey, nextBinding);
       if (checkout.status === "pending")
         return json({ error: "payment_pending", payment_id: checkout.payment_id, status: "pending", retry_after_seconds: 2 }, 202, { "retry-after": "2" });
-      const challenge = await requestPrivatePayCheckoutChallenge(config, { payment_id: checkout.payment_id });
+      let challenge;
+      try {
+        challenge = await requestPrivatePayCheckoutChallenge(config, { payment_id: checkout.payment_id });
+      } catch (error) {
+        if (error?.code === "PRIVATEPAY_CHALLENGE_REJECTED" && error?.statusCode === 409) {
+          const failedBinding = { ...nextBinding, state: "challenge_failed", challenge_failed_at: now(), updated_at: now() };
+          await checkoutStore.put("Payments", requestKey, failedBinding);
+          await checkoutStore.put("Payments", `privatepay_checkout_${checkout.payment_id}`, failedBinding);
+          throw Object.assign(new Error("MagicBlock checkout conflict; retry to create a fresh payment challenge"), {
+            statusCode: 409,
+            code: "PRIVATEPAY_CHECKOUT_RETRYABLE_CONFLICT",
+            retryable: true,
+            retryAfterSeconds: 1,
+          });
+        }
+        throw error;
+      }
       if (challenge.status === "pending")
         return json({ error: "payment_pending", payment_id: checkout.payment_id, status: "pending", retry_after_seconds: challenge.retry_after_seconds || 2 }, 202, { "retry-after": String(challenge.retry_after_seconds || 2) });
       const providerRequirements = decodePrivatePayRequiredHeader(challenge.payment_required_header);
