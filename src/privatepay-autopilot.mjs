@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PublicKey } from "@solana/web3.js";
 import nacl from "tweetnacl";
+import { mongoClientFor } from "./mongodb.mjs";
 
 const MAX_BUDGET_BASE_UNITS = 1000000000000n;
 const MAX_OPERATION_BASE_UNITS = 100000000000n;
@@ -8,7 +9,7 @@ const MAX_OPERATIONS = 10000;
 const MAX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CHALLENGE_TTL_MS = 10 * 60 * 1000;
 const SOLANA_MAINNET_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
-let clientPromise;
+const indexPromises = new Map();
 
 function fail(message, code = "PRIVATEPAY_AUTOPILOT_INVALID", statusCode = 400) {
   throw Object.assign(new Error(message), { code, statusCode });
@@ -109,13 +110,14 @@ function normalizePolicyInput(input = {}) {
 
 async function collections(config) {
   if (!config.mongoUri) fail("MongoDB is required for PrivatePAY Autopilot", "PRIVATEPAY_AUTOPILOT_STORAGE_UNAVAILABLE", 503);
-  if (!clientPromise) {
-    const { MongoClient } = await import("mongodb");
-    clientPromise = MongoClient.connect(config.mongoUri, { serverSelectionTimeoutMS: 3000, connectTimeoutMS: 3000, maxPoolSize: 10, minPoolSize: 0 }).catch((error) => { clientPromise = undefined; throw error; });
-  }
-  const db = (await clientPromise).db(config.mongoDatabase);
+  const client = await mongoClientFor(config);
+  const db = client.db(config.mongoDatabase);
   const [challenges, policies, operations] = ["privatepay_autopilot_challenges", "privatepay_autopilot_policies", "privatepay_autopilot_operations"].map((name) => db.collection(name));
-  await Promise.all([
+  // Build indexes once per database and Lambda environment, not on every request.
+  const indexKey = config.mongoUri + "\\0" + config.mongoDatabase;
+  let pending = indexPromises.get(indexKey);
+  if (!pending) {
+    pending = Promise.all([
     challenges.createIndex({ id: 1 }, { unique: true }),
     challenges.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
     policies.createIndex({ id: 1 }, { unique: true }),
@@ -123,7 +125,13 @@ async function collections(config) {
     operations.createIndex({ id: 1 }, { unique: true }),
     operations.createIndex({ policy_id: 1, status: 1 }),
     operations.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
-  ]);
+    ]).catch((error) => {
+      indexPromises.delete(indexKey);
+      throw error;
+    });
+    indexPromises.set(indexKey, pending);
+  }
+  await pending;
   return { challenges, policies, operations };
 }
 
