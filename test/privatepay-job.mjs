@@ -587,7 +587,7 @@ test("generic PrivatePAY x402 recovers when the retry includes the failed paymen
     }
     if (target.includes("/v1/x402/payments/") && target.endsWith("/pay")) {
       challengeAttempts += 1;
-      if (challengeAttempts <= 2) return new Response(JSON.stringify({ error: { code: "order_conflict" } }), { status: 409, headers: { "content-type": "application/json" } });
+      if (challengeAttempts <= 2) return new Response(JSON.stringify({ error: { code: "PAYMENT_ORDER_CONFLICT" } }), { status: 409, headers: { "content-type": "application/json" } });
       const accepted = {
         scheme: "exact-magicblock",
         network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
@@ -604,8 +604,21 @@ test("generic PrivatePAY x402 recovers when the retry includes the failed paymen
   try {
     resetForTests();
     const input = { payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6", resource: "https://agents.example/api/retry-with-id", provider_id: "provider-1", amount_base_units: "1000", nonce: "retryable-409-with-id" };
-    const failed = await request("/api/privatepay/x402", "POST", input);
-    assert.equal(failed.statusCode, 409);
+    const originalConsoleError = console.error;
+    let conflictLog = null;
+    try {
+      console.error = (line) => {
+        if (typeof line !== "string" || !line.includes("PRIVATEPAY_CHECKOUT_RETRYABLE_CONFLICT")) return;
+        conflictLog = JSON.parse(line);
+      };
+      const failed = await request("/api/privatepay/x402", "POST", input);
+      assert.equal(failed.statusCode, 409);
+      assert.doesNotMatch(failed.body, /PAYMENT_ORDER_CONFLICT/);
+    } finally {
+      console.error = originalConsoleError;
+    }
+    assert.equal(conflictLog?.providerErrorCode, "PAYMENT_ORDER_CONFLICT");
+    assert.equal(conflictLog?.providerStatus, 409);
     const retry = await request("/api/privatepay/x402", "POST", { ...input, payment_id: paymentIds[0] });
     assert.equal(retry.statusCode, 402);
     assert.equal(JSON.parse(retry.body).payment_id, paymentIds[2]);
