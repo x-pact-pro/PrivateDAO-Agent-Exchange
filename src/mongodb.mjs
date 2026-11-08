@@ -1,4 +1,4 @@
-let clientPromise;
+const clientPromises = new Map();
 
 export function mongoProviderStatus(config) {
   return {
@@ -11,28 +11,33 @@ export function mongoProviderStatus(config) {
   };
 }
 
-async function clientFor(config) {
-  if (!config.mongoUri) return null;
-  if (!clientPromise) {
-    const { MongoClient } = await import("mongodb");
-    clientPromise = MongoClient.connect(config.mongoUri, {
+// Reuse one bounded pool per URI across evidence, accounts, and PrivatePAY Autopilot.
+// Warm Lambda environments share the pool instead of opening three MongoClients.
+export async function mongoClientFor(config) {
+  const uri = config.mongoUri;
+  if (!uri) return null;
+  let pending = clientPromises.get(uri);
+  if (!pending) {
+    pending = import("mongodb").then(({ MongoClient }) => MongoClient.connect(uri, {
       serverSelectionTimeoutMS: 3000,
       connectTimeoutMS: 3000,
       maxPoolSize: 5,
       minPoolSize: 0,
-    }).catch((error) => {
-      clientPromise = undefined;
+      maxIdleTimeMS: 30000,
+    })).catch((error) => {
+      clientPromises.delete(uri);
       throw error;
     });
+    clientPromises.set(uri, pending);
   }
-  return clientPromise;
+  return pending;
 }
 
 export async function persistEvidence(config, document) {
   if (!config.mongoUri)
     return { provider: "mongodb", status: "not_configured", persisted: false };
   try {
-    const client = await clientFor(config);
+    const client = await mongoClientFor(config);
     const collection = client.db(config.mongoDatabase).collection(config.mongoCollection);
     await collection.createIndex({ job_id: 1 }, { unique: true, name: "job_id_unique" });
     await collection.createIndex({ service: 1, completed_at: -1 }, { name: "service_completed_at" });
