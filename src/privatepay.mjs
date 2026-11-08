@@ -572,9 +572,15 @@ function splProviderStatusCode(status) {
 function providerRejectedError(message, code, response, payload = {}) {
   const payment = payload?.payment && typeof payload.payment === "object" ? payload.payment : payload;
   const paymentId = String(payment?.id || payment?.paymentId || payment?.payment_id || "").trim();
+  // Preserve only a bounded machine-readable upstream error code. Never log provider
+  // response bodies, payment payloads, authorization headers, or diagnostic messages.
+  const candidateCode = payload?.error?.code ?? payload?.code ?? payload?.errorCode ?? payload?.error_code;
+  const providerErrorCode = typeof candidateCode === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(candidateCode)
+    ? candidateCode : null;
   return Object.assign(new Error(`${message} (${response.status})`), {
     statusCode: providerStatusCode(response.status),
     code,
+    provider_error_code: providerErrorCode,
     provider_status: response.status,
     facilitator_status: response.status,
     ...(PRIVATEPAY_ID.test(paymentId) ? { payment_id: paymentId } : {}),
