@@ -1,10 +1,10 @@
 import { promisify } from "node:util";
 import { randomBytes, scrypt, timingSafeEqual, createHash } from "node:crypto";
+import { mongoClientFor } from "./mongodb.mjs";
 
 const scryptAsync = promisify(scrypt);
 const SESSION_COOKIE = "pdao_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-let clientPromise;
 let indexesPromise;
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
@@ -45,22 +45,8 @@ export function sessionCookie(token, maxAge = SESSION_TTL_MS / 1000) {
   return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${Math.max(0, Math.floor(maxAge))}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
-async function mongoClient(config) {
-  if (!config.mongoUri) return null;
-  if (!clientPromise) {
-    const { MongoClient } = await import("mongodb");
-    clientPromise = MongoClient.connect(config.mongoUri, {
-      serverSelectionTimeoutMS: 3000,
-      connectTimeoutMS: 3000,
-      maxPoolSize: 10,
-      minPoolSize: 0,
-    }).catch((error) => { clientPromise = undefined; throw error; });
-  }
-  return clientPromise;
-}
-
 async function collections(config) {
-  const client = await mongoClient(config);
+  const client = await mongoClientFor(config);
   if (!client) return null;
   const db = client.db(config.mongoDatabase);
   if (!indexesPromise) {
