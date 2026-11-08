@@ -211,6 +211,34 @@ test("MagicBlock merchant adapter preserves documented provider status classes",
   }
 });
 
+test("MagicBlock provider conflict exposes only a bounded diagnostic code", async () => {
+  const config = magicBlockCheckoutConfig();
+  const request = {
+    payer: TEST_PAYER,
+    amount_base_units: "1000",
+    resource: "https://agents.example/api/service/verify",
+    external_reference: "diagnostic-409",
+  };
+  await assert.rejects(
+    createPrivatePayCheckout(config, request, async () => response(409, {
+      error: { code: "order_conflict", message: "private provider details must not leak" },
+      accessToken: "secret-fixture",
+    })),
+    (error) => error.code === "PRIVATEPAY_CHECKOUT_REJECTED"
+      && error.statusCode === 409
+      && error.provider_status === 409
+      && error.provider_error_code === "order_conflict"
+      && !JSON.stringify({ message: error.message, code: error.code, diagnostic: error.provider_error_code }).includes("secret-fixture"),
+  );
+  await assert.rejects(
+    requestPrivatePayCheckoutChallenge(config, { payment_id: TEST_PAYMENT_ID }, async () =>
+      response(409, { error: { code: "invalid value containing secrets and spaces" } })),
+    (error) => error.code === "PRIVATEPAY_CHALLENGE_REJECTED"
+      && error.provider_error_code === null
+      && error.statusCode === 409,
+  );
+});
+
 test("MagicBlock checkout challenge preserves pending status without requiring a header", async () => {
   const result = await requestPrivatePayCheckoutChallenge(magicBlockCheckoutConfig(), { payment_id: TEST_PAYMENT_ID }, async () => response(202, { status: "pending" }));
   assert.deepEqual(result, { payment_id: TEST_PAYMENT_ID, status: "pending", provider_status: 202, retry_after_seconds: 2 });

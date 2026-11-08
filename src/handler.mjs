@@ -5951,6 +5951,10 @@ async function handle(e) {
               throw Object.assign(new Error("MagicBlock checkout conflict; retry to create a fresh payment challenge"), {
                 statusCode: 409,
                 code: "PRIVATEPAY_CHECKOUT_RETRYABLE_CONFLICT",
+                // Preserve bounded diagnostics from the second provider rejection
+                // for internal logs, without putting the provider response on the wire.
+                provider_error_code: retryError?.provider_error_code || null,
+                provider_status: retryError?.provider_status || 409,
                 retryable: true,
                 retryAfterSeconds: 1,
               });
@@ -7015,6 +7019,8 @@ export async function handler(event) {
       error: error.name || "Error",
       code: error.code || null,
       diagnosticFields: Array.isArray(error.diagnostic_fields) ? error.diagnostic_fields : null,
+      providerErrorCode: typeof error.provider_error_code === "string" ? error.provider_error_code : null,
+      providerStatus: Number.isInteger(error.provider_status) ? error.provider_status : null,
       upstreamStatus: error.upstreamStatus || null,
     }));
     return withSecurityHeaders(errorResponse(error));
