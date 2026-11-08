@@ -5951,6 +5951,10 @@ async function handle(e) {
               throw Object.assign(new Error("MagicBlock checkout conflict; retry to create a fresh payment challenge"), {
                 statusCode: 409,
                 code: "PRIVATEPAY_CHECKOUT_RETRYABLE_CONFLICT",
+                // Preserve bounded diagnostics from the second provider rejection
+                // for internal logs, without putting the provider response on the wire.
+                provider_error_code: retryError?.provider_error_code || null,
+                provider_status: retryError?.provider_status || 409,
                 retryable: true,
                 retryAfterSeconds: 1,
               });
