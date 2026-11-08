@@ -125,7 +125,7 @@ async function collections(config) {
     operations.createIndex({ id: 1 }, { unique: true }),
     operations.createIndex({ policy_id: 1, status: 1 }),
     operations.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
-  ]);.catch((error) => {
+    ]).catch((error) => {
       indexPromises.delete(indexKey);
       throw error;
     });
