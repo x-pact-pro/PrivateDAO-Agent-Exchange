@@ -7015,6 +7015,8 @@ export async function handler(event) {
       error: error.name || "Error",
       code: error.code || null,
       diagnosticFields: Array.isArray(error.diagnostic_fields) ? error.diagnostic_fields : null,
+      providerErrorCode: typeof error.provider_error_code === "string" ? error.provider_error_code : null,
+      providerStatus: Number.isInteger(error.provider_status) ? error.provider_status : null,
       upstreamStatus: error.upstreamStatus || null,
     }));
     return withSecurityHeaders(errorResponse(error));
