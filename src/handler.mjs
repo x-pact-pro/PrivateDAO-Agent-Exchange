@@ -5855,10 +5855,15 @@ async function handle(e) {
         throw Object.assign(new Error("this PrivatePAY checkout was already paid"), { statusCode: 409, code: "PRIVATEPAY_CHECKOUT_ALREADY_PAID" });
       // A pending response carries the provider payment id. Reusing it must
       // resume the same checkout instead of creating a second charge.
-      const existingPaymentId = challengeFailed ? "" : (suppliedPaymentId || (reusableCheckout(requestRecord) ? requestRecord.payment_id : ""));
+      // A delayed replay of the superseded failed ID must follow a usable
+      // replacement that has already passed the same request binding checks.
+      const replacementRecord = suppliedRecord?.state === "challenge_failed" && reusableCheckout(requestRecord)
+        ? requestRecord : null;
+      const existingPaymentId = replacementRecord?.payment_id
+        || (challengeFailed ? "" : (suppliedPaymentId || (reusableCheckout(requestRecord) ? requestRecord.payment_id : "")));
       const suppliedExternalReference = String(x402Input.external_reference || x402Input.externalReference || "").trim();
       const deterministicExternalReference = `privatepay-x402-${digest(checkoutIdentity).slice(0, 32)}`;
-      let externalReference = suppliedExternalReference
+      let externalReference = replacementRecord?.external_reference || suppliedExternalReference
         || (challengeFailed
           ? `${deterministicExternalReference}-${randomUUID()}`
           : deterministicExternalReference);
