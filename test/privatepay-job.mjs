@@ -84,18 +84,19 @@ test("PrivatePAY wallet balance lookup is read-only and rejects invalid wallets"
   assert.match(response.body, /valid Solana wallet|invalid Solana wallet/i);
 });
 
-test("PrivatePAY balance preflight rejects an unfunded payer before provider checkout", async () => {
+test("PrivatePAY preflight directs an undelegated payer to Shield before provider checkout", async () => {
   const originalFetch = globalThis.fetch;
   const originalPreflight = process.env.PRIVATEPAY_BALANCE_PREFLIGHT;
   let providerCheckoutCalls = 0;
   process.env.PRIVATEPAY_BALANCE_PREFLIGHT = "true";
   globalThis.fetch = async (url, init = {}) => {
     const target = String(url);
-    const payload = JSON.parse(init.body || "{}");
-    if (payload.method === "getBalance")
-      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: 0 } }), { status: 200, headers: { "content-type": "application/json" } });
-    if (payload.method === "getTokenAccountsByOwner")
-      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: [] } }), { status: 200, headers: { "content-type": "application/json" } });
+    if (target.includes("/v1/spl/balance?")) {
+      const params = new URL(target).searchParams;
+      assert.equal(params.get("mint"), process.env.PRIVATEPAY_CONFIDENTIAL_MINT);
+      assert.equal(params.get("cluster"), "mainnet-private");
+      return Response.json({ delegation: { status: "undelegated" } });
+    }
     if (target.endsWith("/v1/payments")) {
       providerCheckoutCalls += 1;
       throw new Error("provider checkout must not be reached for an unfunded payer");
@@ -110,8 +111,8 @@ test("PrivatePAY balance preflight rejects an unfunded payer before provider che
       provider_id: "provider-1",
       amount_base_units: "1000",
     });
-    assert.equal(response.statusCode, 402);
-    assert.equal(JSON.parse(response.body).code, "PRIVATEPAY_PAYER_USDC_INSUFFICIENT");
+    assert.equal(response.statusCode, 422);
+    assert.equal(JSON.parse(response.body).code, "PRIVATEPAY_PAYER_DELEGATION_REQUIRED");
     assert.equal(providerCheckoutCalls, 0);
   } finally {
     globalThis.fetch = originalFetch;
