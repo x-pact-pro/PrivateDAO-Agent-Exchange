@@ -604,6 +604,27 @@ function checkoutResponseBody(payload, providerStatus = 200) {
   };
 }
 
+export async function checkPrivatePayPayerDelegation(config, payer, fetchImpl = fetch) {
+  const url = new URL(privatePayProviderUrl(config, "/v1/spl/balance"));
+  url.search = new URLSearchParams({ address: payer, mint: config.privatePayConfidentialMint, cluster: MAGICBLOCK_PRIVATE_CLUSTER }).toString();
+  // The challenge remains authoritative if the optional read is unavailable.
+  let balance;
+  try {
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(3000) });
+    if (!response.ok) return;
+    balance = await response.json();
+  } catch {
+    return;
+  }
+  const delegation = balance?.delegation;
+  if (delegation?.status === "undelegated" ||
+      (delegation?.status === "delegated" && delegation.validator && delegation.validator !== magicBlockValidator(config))) {
+    throw Object.assign(new Error("Set up this wallet's USDC on MagicBlock One using Shield on Solana Mainnet (mainnet-private), then return to PrivatePAY. No checkout was created."), {
+      statusCode: 422, code: "PRIVATEPAY_PAYER_DELEGATION_REQUIRED",
+    });
+  }
+}
+
 export async function createPrivatePayCheckout(config, input = {}, fetchImpl = fetch) {
   assertMerchantCheckoutReady(config);
   const payer = String(input.payer || "").trim();
