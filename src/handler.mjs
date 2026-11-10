@@ -1734,6 +1734,52 @@ const connectCandidate=async item=>{let result;try{result=await timeout(item.pro
 const readWalletBalance=async payer=>{if(!balanceBox)return;balanceBox.textContent='Reading finalized Solana balances…';try{const response=await fetch('/api/privatepay/wallet-balance?wallet='+encodeURIComponent(payer),{cache:'no-store'}),value=await response.json();if(!response.ok)throw new Error(value.message||value.error||'balance lookup failed');const money=number=>Number(number||0).toLocaleString(undefined,{maximumFractionDigits:6});balanceBox.textContent='Balances · SOL '+money(value.sol?.ui_amount)+' · USDC '+money(value.usdc?.ui_amount)+' · PDAO '+money(value.pdao?.ui_amount)+' · read-only';}catch(error){balanceBox.textContent='Balance lookup unavailable: '+(error.message||String(error));}};
 const renderWallets=()=>{walletBox.innerHTML='<strong style="width:100%">Choose a Solana wallet</strong>';const found=candidates();if(!found.length){walletBox.insertAdjacentHTML('beforeend','<span style="width:100%;color:#52657c">No browser wallet detected. Open this page in Phantom or Solflare Mobile.</span>');return found}found.forEach(item=>{const choice=document.createElement('button');choice.type='button';choice.textContent='Use '+item.name;choice.style='padding:10px 13px;border:1px solid #dbe5ef;border-radius:999px;background:#fff;font:inherit;font-weight:750;cursor:pointer';choice.onclick=()=>run(item);walletBox.append(choice)});return found};
 const requestWithRetry=async options=>{let response;for(let attempt=0;attempt<3;attempt++){response=await fetch('/api/privatepay/x402',options);if(![502,503,504].includes(response.status)||attempt===2)return response;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)))}return response};
+const shieldButton=document.createElement('button');
+shieldButton.type='button';
+shieldButton.className='button';
+shieldButton.textContent='Set up private USDC';
+button.after(shieldButton);
+const setupPrivateUsdc=async item=>{
+  shieldButton.disabled=true;
+  try{
+    if(!item)throw Error('Open this page in a Solana wallet to set up private USDC.');
+    const {payer}=await connectCandidate(item);
+    const amountBaseUnits=units();
+    status.textContent='Preparing '+(Number(amountBaseUnits)/1000000)+' USDC for your private balance. Review the deposit and network fee in your wallet.';
+    const input={payer,resource,provider_id:providerId,amount_base_units:amountBaseUnits,nonce:crypto.randomUUID(),pdao_optional:true};
+    const quoteResponse=await fetch('/api/privatepay/x402/requirements',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
+    const quote=await quoteResponse.json();
+    if(!quoteResponse.ok)throw Error(quote.message||'Private balance quote unavailable');
+    const preparedResponse=await fetch('/api/privatepay/x402/prepare',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({phase:'deposit',payer,amount_base_units:amountBaseUnits,request_id:quote.request_id,initialize_accounts:true})});
+    const prepared=await preparedResponse.json();
+    if(!preparedResponse.ok)throw Error(prepared.message||'Private USDC setup unavailable');
+    if(prepared.send_to!=='base')throw Error('Unexpected setup network');
+    if(typeof item.provider.signAndSendTransaction!=='function')throw Error('This wallet must support sign-and-send for USDC setup. Open this page in Phantom or Solflare.');
+    const web3=await import('/assets/browser/solana-web3.mjs');
+    const bytes=decode(prepared.transaction_base64);
+    let transaction;
+    try{transaction=web3.VersionedTransaction.deserialize(bytes)}catch{transaction=web3.Transaction.from(bytes)}
+    const result=await item.provider.signAndSendTransaction(transaction);
+    const signature=result?.signature||result;
+    status.textContent='USDC setup submitted: '+String(signature)+'. Wait for confirmation in your wallet, then choose wallet and pay. The deposit funds your private balance.';
+  }catch(error){status.textContent='USDC SETUP: '+(error.message||String(error))}
+  finally{shieldButton.disabled=false}
+};
+shieldButton.onclick=()=>{
+  walletBox.hidden=false;
+  walletBox.replaceChildren();
+  const label=document.createElement('strong');
+  label.textContent='Choose a wallet to set up private USDC';
+  walletBox.append(label);
+  for(const item of candidates()){
+    const choice=document.createElement('button');
+    choice.type='button';
+    choice.textContent='Set up with '+item.name;
+    choice.onclick=()=>setupPrivateUsdc(item);
+    walletBox.append(choice);
+  }
+  status.textContent='Choose the wallet whose USDC private balance you want to fund. Review the amount above before approving.';
+};
 const run=async selected=>{button.disabled=true;walletBox.hidden=true;try{const found=candidates(),item=selected||found[0];if(!item){walletBox.hidden=false;renderWallets();throw Error('No Solana wallet detected. Install Phantom, Solflare, Backpack, or open this page inside a wallet app.')}status.textContent='Connecting to '+item.name+'… approve the connection in your wallet.';const {payer}=await connectCandidate(item);const amountBaseUnits=units(),checkoutNonce=crypto.randomUUID();const first=await requestWithRetry({method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({payer,resource,provider_id:providerId,amount_base_units:amountBaseUnits,nonce:checkoutNonce,pdao_optional:true})});const requiredHeader=first.headers.get('PAYMENT-REQUIRED'),firstBody=await first.json().catch(()=>({}));if(first.status!==402||!requiredHeader)throw Error((firstBody.message||firstBody.error||'MagicBlock payment challenge unavailable')+' (HTTP '+first.status+')');const required=JSON.parse(new TextDecoder().decode(decode(requiredHeader))),accepted=required.accepts?.[0],raw=accepted?.extra?.transaction;if(!raw)throw Error('MagicBlock challenge did not include a transaction');const web3=await import('/assets/browser/solana-web3.mjs'),deserializeTransaction=bytes=>{try{return web3.VersionedTransaction.deserialize(bytes)}catch(_error){return web3.Transaction.from(bytes)}},unsigned=deserializeTransaction(decode(raw)),signed=await item.provider.signTransaction(unsigned),signedTransaction=signed?.__signedBytes?deserializeTransaction(signed.__signedBytes):signed,transaction=encode(signedTransaction.serialize({requireAllSignatures:false,verifySignatures:false})),payload={x402Version:2,resource:required.resource,accepted,payload:{paymentId:accepted.extra.paymentId,transaction}},paymentSignature=encode(new TextEncoder().encode(JSON.stringify(payload)));status.textContent='Signed locally. Submitting the exact x402 payment…';const second=await requestWithRetry({method:'POST',headers:{'content-type':'application/json','payment-signature':paymentSignature},body:JSON.stringify({payer,resource,provider_id:providerId,amount_base_units:amountBaseUnits,nonce:checkoutNonce,pdao_optional:true})}),secondBody=await second.json().catch(()=>({}));status.textContent=JSON.stringify({status:second.status,payment_id:accepted.extra.paymentId,payer,response:secondBody,payment_response:second.headers.get('PAYMENT-RESPONSE')||null},null,2)}catch(error){status.textContent='PRIVATE PAYMENT ERROR: '+(error.message||String(error))}finally{button.disabled=false}};
 document.querySelectorAll('[data-privatepay-mobile]').forEach(button=>button.addEventListener('click',()=>{const target=encodeURIComponent(location.href),ref=encodeURIComponent(location.origin);const url=button.dataset.privatepayMobile==='phantom'?'https://phantom.app/ul/browse/'+target+'?ref='+ref:'https://solflare.com/ul/v1/browse/'+target+'?ref='+ref;status.textContent='Opening '+button.textContent+'. Approve the page in the wallet app, then return here.';location.href=url;}));
   button.onclick=async()=>{walletBox.hidden=false;const found=renderWallets();status.textContent=found.length?'Choose the wallet you want to use.':'No compatible browser wallet detected yet. Open this page in Phantom or Solflare Mobile, then try again.'};
@@ -5986,8 +6032,12 @@ async function handle(e) {
     const verification = await privatePayMagicBlockFacilitatorRequest(config, "verify", paymentPayload);
     if (verification.status === "pending")
       return json({ error: "privatepay_verification_pending", request_id: requirements.request_id, payment_id: verification.payment_id, status: "pending", retry_after_seconds: verification.retry_after_seconds || 2 }, 202, { "retry-after": String(verification.retry_after_seconds || 2) });
-    if (verification.isValid !== true)
+    if (verification.isValid !== true) {
+      const reason = verification.invalidReason || verification.reason || verification.error?.code || verification.code;
+      console.error(JSON.stringify({ event: "privatepay_verification_rejected", requestId: requirements.request_id,
+        providerErrorCode: typeof reason === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(reason) ? reason : null }));
       return json({ error: "privatepay_payment_invalid", request_id: requirements.request_id, status: "rejected" }, 402);
+    }
     const settlement = await privatePayMagicBlockFacilitatorRequest(config, "settle", paymentPayload);
     if (settlement.status === "pending")
       return json({ error: "privatepay_settlement_pending", request_id: requirements.request_id, payment_id: settlement.payment_id, status: "pending", retry_after_seconds: settlement.retry_after_seconds || 2 }, 202, { "retry-after": String(settlement.retry_after_seconds || 2) });

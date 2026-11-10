@@ -454,9 +454,9 @@ export async function preparePrivatePayDeposit(config, input = {}, fetchImpl = f
     amount: Number(amount),
     cluster: isMagicBlockRail(config) ? MAGICBLOCK_PRIVATE_CLUSTER : providerCluster(config),
     ...(isMagicBlockRail(config) ? { validator: magicBlockValidator(config) } : {}),
-    initIfMissing: false,
-    initVaultIfMissing: false,
-    initAtasIfMissing: false,
+    initIfMissing: input.initialize_accounts === true,
+    initVaultIfMissing: input.initialize_accounts === true,
+    initAtasIfMissing: input.initialize_accounts === true,
     idempotent: true,
   };
   return preparePrivatePayBaseTransaction(config, "deposit", "/v1/spl/deposit", body, requestId, fetchImpl);
@@ -619,7 +619,7 @@ export async function checkPrivatePayPayerDelegation(config, payer, fetchImpl = 
   const delegation = balance?.delegation;
   if (delegation?.status === "undelegated" ||
       (delegation?.status === "delegated" && delegation.validator && delegation.validator !== magicBlockValidator(config))) {
-    throw Object.assign(new Error("Set up this wallet's USDC on MagicBlock One using Shield on Solana Mainnet (mainnet-private), then return to PrivatePAY. No checkout was created."), {
+    throw Object.assign(new Error("Use Set up private USDC on this page to initialize and fund your private Mainnet balance, then choose wallet and pay."), {
       statusCode: 422, code: "PRIVATEPAY_PAYER_DELEGATION_REQUIRED",
     });
   }
