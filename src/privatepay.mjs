@@ -657,8 +657,9 @@ export async function requestPrivatePayWalletChallenge(config, wallet, fetchImpl
     challenge: body.challenge,
     message: body.message || body.challenge,
     expires_at: typeof body.expiresAt === "string" ? body.expiresAt : null,
-    read_only: true,
+    authorization_purpose: "read_shielded_balance",
     requires_wallet_message_signature: true,
+    payment_requires_separate_transaction_signature: true,
   };
 }
 
@@ -697,8 +698,24 @@ export async function readAuthenticatedPrivatePayBalance(config, input = {}, fet
   } catch {
     throw Object.assign(new Error("MagicBlock authenticated private balance is unavailable"), { statusCode: 503, code: "PRIVATEPAY_PRIVATE_BALANCE_UNAVAILABLE" });
   }
-  if (!balanceResponse.ok)
-    throw Object.assign(new Error("MagicBlock refused the authenticated private balance read"), { statusCode: 503, code: "PRIVATEPAY_PRIVATE_BALANCE_REJECTED", provider_status: balanceResponse.status });
+  if (!balanceResponse.ok) {
+    // Preserve only an allowlisted machine-readable error code. Never disclose
+    // wallet-private provider responses, bearer tokens, signatures or challenges.
+    const providerPayload = await balanceResponse.json().catch(() => ({}));
+    const candidateCode = providerPayload?.error?.code ?? providerPayload?.code ?? providerPayload?.errorCode ?? providerPayload?.error_code;
+    const providerErrorCode = typeof candidateCode === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(candidateCode)
+      ? candidateCode : null;
+    throw Object.assign(new Error(
+      balanceResponse.status === 400
+        ? "MagicBlock rejected this wallet's private-balance account query. Reconcile the existing delegated account; do not make another deposit."
+        : "MagicBlock refused the authenticated private balance read"
+    ), {
+      statusCode: balanceResponse.status === 400 ? 422 : [401, 403].includes(balanceResponse.status) ? 403 : 503,
+      code: "PRIVATEPAY_PRIVATE_BALANCE_REJECTED",
+      provider_status: balanceResponse.status,
+      provider_error_code: providerErrorCode,
+    });
+  }
   const balance = await balanceResponse.json().catch(() => ({}));
   // Fail closed on a mismatched owner, mint, or location. Never accept ordinary
   // public USDC account balances as evidence of shielded USDC.
@@ -717,7 +734,7 @@ export async function readAuthenticatedPrivatePayBalance(config, input = {}, fet
     amount_base_units: String(amount),
     amount_usdc: `${amount / 1000000n}.${String(amount % 1000000n).padStart(6, "0")}`,
     authenticated: true,
-    read_only: true,
+    payment_requires_separate_transaction_signature: true,
     source: "magicblock_wallet_authorized_private_balance",
   };
 }
