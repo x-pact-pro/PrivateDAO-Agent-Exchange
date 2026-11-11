@@ -1843,10 +1843,10 @@ document.querySelector('[data-privatepay-shield-nav]')?.addEventListener('click'
 });
 const run=async selected=>{button.disabled=true;walletBox.hidden=true;try{const found=candidates(),item=selected||found[0];if(!item){walletBox.hidden=false;renderWallets();throw Error('No Solana wallet detected. Install Phantom, Solflare, Backpack, or open this page inside a wallet app.')}status.textContent='Connecting to '+item.name+'… approve the connection in your wallet.';const {payer}=await connectCandidate(item);const amountBaseUnits=units(),checkoutNonce=crypto.randomUUID();const first=await requestWithRetry({method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({payer,resource,provider_id:providerId,amount_base_units:amountBaseUnits,nonce:checkoutNonce,pdao_optional:true})});const requiredHeader=first.headers.get('PAYMENT-REQUIRED'),firstBody=await first.json().catch(()=>({}));if(first.status!==402||!requiredHeader){
   if(first.status===422){
-    walletAction='setup';
+    walletAction='balance';
     walletBox.hidden=false;
     renderWallets();
-    throw Error('Private checkout was rejected before payment. Check the private account status and use Set up private USDC here only if funds are not already shielded. No charge was made by this checkout. (HTTP 422)');
+    throw Error('Private checkout was rejected before payment. Use Read shielded USDC and sign the read-only message before considering any new deposit. The checkout did not charge you. (HTTP 422)');
   }
   throw Error((firstBody.message||firstBody.error||'MagicBlock payment challenge unavailable')+' (HTTP '+first.status+')');
 }const required=JSON.parse(new TextDecoder().decode(decode(requiredHeader))),accepted=required.accepts?.[0],raw=accepted?.extra?.transaction;if(!raw)throw Error('MagicBlock challenge did not include a transaction');
@@ -1855,7 +1855,9 @@ if(!routeResponse.ok||route.merchant_pay_to_matches_treasury!==true)
   throw Error('Merchant payout destination is not verified against the PrivateDAO treasury; payment was NOT signed');
 if(accepted.scheme!=='exact-magicblock'||accepted.network!=='solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'
   ||accepted.asset!==route.asset||accepted.amount!==amountBaseUnits
-  ||accepted.payTo!==route.privatepay_x402_pay_to||accepted.extra?.cluster!=='mainnet-private')
+  ||accepted.payTo!==route.privatepay_x402_pay_to||accepted.extra?.cluster!=='mainnet-private'
+  ||accepted.extra?.payer!==payer||accepted.extra?.merchantId!==route.privatepay_x402_pay_to
+  ||accepted.extra?.resource!==resource||accepted.extra?.paymentId!==firstBody.payment_id)
   throw Error('The private payment quote differs from the exact Mainnet USDC amount, asset, or treasury; no payment was signed');const web3=await import('/assets/browser/solana-web3.mjs'),deserializeTransaction=bytes=>{try{return web3.VersionedTransaction.deserialize(bytes)}catch(_error){return web3.Transaction.from(bytes)}},unsigned=deserializeTransaction(decode(raw)),signed=await item.provider.signTransaction(unsigned),signedTransaction=signed?.__signedBytes?deserializeTransaction(signed.__signedBytes):signed,transaction=encode(signedTransaction.serialize({requireAllSignatures:false,verifySignatures:false})),payload={x402Version:2,resource:required.resource,accepted,payload:{paymentId:accepted.extra.paymentId,transaction}},paymentSignature=encode(new TextEncoder().encode(JSON.stringify(payload)));status.textContent='Signed locally. Submitting the exact x402 payment…';const second=await requestWithRetry({method:'POST',headers:{'content-type':'application/json','payment-signature':paymentSignature},body:JSON.stringify({payer,resource,provider_id:providerId,amount_base_units:amountBaseUnits,nonce:checkoutNonce,pdao_optional:true})}),secondBody=await second.json().catch(()=>({}));status.textContent=JSON.stringify({status:second.status,payment_id:accepted.extra.paymentId,payer,response:secondBody,payment_response:second.headers.get('PAYMENT-RESPONSE')||null},null,2)}catch(error){status.textContent='PRIVATE PAYMENT ERROR: '+(error.message||String(error))}finally{button.disabled=false}};
 document.querySelectorAll('[data-privatepay-mobile]').forEach(button=>button.addEventListener('click',()=>{const target=encodeURIComponent(location.href),ref=encodeURIComponent(location.origin);const url=button.dataset.privatepayMobile==='phantom'?'https://phantom.app/ul/browse/'+target+'?ref='+ref:'https://solflare.com/ul/v1/browse/'+target+'?ref='+ref;status.textContent='Opening '+button.textContent+'. Approve the page in the wallet app, then return here.';location.href=url;}));
   button.onclick=async()=>{walletAction='pay';walletBox.hidden=false;const found=renderWallets();status.textContent=found.length?'Choose the wallet you want to use.':'No compatible browser wallet detected yet. Open this page in Phantom or Solflare Mobile, then try again.'};
@@ -4093,12 +4095,15 @@ function assertPrivatePayJobQuoteBinding(localRequirements, providerRequirements
   return providerRequirements;
 }
 
-function privatePayCheckoutMismatchFields(providerRequirements, localRequirements, expectedPaymentId) {
+function privatePayCheckoutMismatchFields(providerRequirements, localRequirements, expectedPaymentId, expectedPayer) {
   const provider = providerRequirements?.accepts?.[0];
   const local = localRequirements?.accepts?.[0];
   const checks = [
     ["resource", providerRequirements?.resource?.url, localRequirements?.resource?.url],
     ["payment_id", provider?.extra?.paymentId, expectedPaymentId],
+    ["payer", provider?.extra?.payer, expectedPayer],
+    ["merchant_id", provider?.extra?.merchantId, local?.payTo],
+    ["provider_resource", provider?.extra?.resource, localRequirements?.resource?.url],
     ["scheme", provider?.scheme, local?.scheme],
     ["amount", provider?.amount, local?.amount],
     ["asset", provider?.asset, local?.asset],
@@ -6116,7 +6121,7 @@ async function handle(e) {
       if (challenge.status === "pending")
         return json({ error: "payment_pending", payment_id: checkout.payment_id, status: "pending", retry_after_seconds: challenge.retry_after_seconds || 2 }, 202, { "retry-after": String(challenge.retry_after_seconds || 2) });
       const providerRequirements = decodePrivatePayRequiredHeader(challenge.payment_required_header);
-      const mismatchFields = privatePayCheckoutMismatchFields(providerRequirements, requirements.requirements, checkout.payment_id);
+      const mismatchFields = privatePayCheckoutMismatchFields(providerRequirements, requirements.requirements, checkout.payment_id, checkoutBinding.payer);
       if (mismatchFields.length)
         throw Object.assign(new Error("MagicBlock returned a challenge for a different checkout"), {
           statusCode: 502,
