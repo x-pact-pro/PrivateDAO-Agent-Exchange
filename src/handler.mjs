@@ -1004,6 +1004,8 @@ function openapi() {
     "/api/integrations": { get: { operationId: "integrations" } },
     "/api/questline/{questId}/status": { get: { operationId: "questlinePullStatus", summary: "Read Questline completion", description: "Read-only MagicBlock Pull validation. Returns a JSON boolean and never exposes job IDs, payment details, credentials, or wallet private data.", parameters: [{ name: "questId", in: "path", required: true, schema: { type: "integer", minimum: 1 } }, { name: "user", in: "query", required: true, schema: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" } }], responses: { "200": { description: "JSON boolean: true only for a validated or completed Questline record" }, "400": { description: "Invalid Solana wallet" }, "404": { description: "Quest is not configured" } } } },
     "/api/privatepay/status": { get: { operationId: "privatePayStatus", summary: "Read PrivatePAY readiness", description: "Read-only, fail-closed status for the Solana Mainnet PrivatePAY x402 rail, MagicBlock private settlement, PDAO entry rule, fees, and privacy boundary.", responses: { "200": { description: "Current readiness and privacy status", content: { "application/json": { schema: privatePayResponse } } } } } },
+    "/api/privatepay/private-auth-challenge": { get: { operationId: "privatePayWalletChallenge", summary: "Request signed MagicBlock wallet authorization", description: "Return a fresh Mainnet challenge for the supplied public wallet. The wallet signs locally; no transaction or payment is authorized.", parameters: [{ name: "wallet", in: "query", required: true, schema: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" } }], responses: { "200": { description: "Wallet-bound challenge and message" } } } },
+    "/api/privatepay/private-balance": { post: { operationId: "privatePayPrivateBalance", summary: "Read wallet-authorized shielded USDC", description: "Exchange the signed MagicBlock challenge for a short-lived provider login inside the backend, then read the exact Mainnet private balance. No bearer token is returned or stored. Payments require a separate wallet transaction signature.", requestBody: { required: true, content: { "application/json": { schema: { type: "object", properties: { wallet: { type: "string" }, challenge: { type: "string" }, signature: { type: "string", description: "Base64 Ed25519 wallet signature" } }, required: ["wallet", "challenge", "signature"], additionalProperties: false } } } }, responses: { "200": { description: "Authenticated shielded USDC amount" }, "422": { description: "MagicBlock rejected the private-account balance query; reconcile existing delegation" } } } },
     "/api/privatepay/wallet-balance": { get: { operationId: "privatePayWalletBalance", summary: "Read wallet balances", description: "Read-only Solana Mainnet balance lookup for the connected public wallet. No signature, payment, or private key is requested.", parameters: [{ name: "wallet", in: "query", required: true, schema: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" } }], responses: { "200": { description: "SOL, USDC, and PDAO balances" }, "400": { description: "Invalid wallet" }, "503": { description: "RPC unavailable" } } } },
     "/api/privatepay/autopilot/status": { get: { operationId: "privatePayAutopilotStatus", summary: "Read Autopilot status", description: "Read-only status for bounded PrivatePAY Autopilot policies. Delegated agent-session custody, explicit target allowlists, limits, and activation state are returned; reusable x402 credentials are never enabled.", responses: { "200": { description: "Autopilot configuration status", content: { "application/json": { schema: privatePayResponse } } } } } },
     "/api/privatepay/autopilot/challenge": { post: { operationId: "privatePayAutopilotChallenge", summary: "Create an Autopilot challenge", description: "Create a fresh challenge before a user creates a bounded session policy. This does not move funds.", requestBody: { required: true, content: { "application/json": { schema: autopilotPolicyInput } } }, responses: { "200": { description: "Fresh challenge" }, "403": { description: "Entry policy rejected" }, "503": { description: "Autopilot not explicitly activated" } } } },
@@ -1731,7 +1733,7 @@ const timeout=(promise,ms)=>Promise.race([promise,new Promise((_,reject)=>setTim
 const publicKeyOf=value=>{const key=value?.publicKey||value?.account?.address||value?.accounts?.[0]?.address;return typeof key==='string'?key:key?.toBase58?.()||key?.toString?.()||''};
   const candidates=()=>{const found=[],add=(name,provider)=>{if(provider&&typeof provider.connect==='function'&&typeof provider.signTransaction==='function'&&!found.some(item=>item.provider===provider))found.push({name,provider})};add('Solflare',window.solflare?.solana);add('Phantom',window.phantom?.solana);add('Backpack',window.backpack?.solana);add('Browser Solana wallet',window.solana);for(const wallet of window.__pdaoStandardWallets||[]){const connect=wallet?.features?.['standard:connect'],sign=wallet?.features?.['solana:signTransaction'];if(!connect||!sign)continue;let account=wallet.accounts?.[0];const signMessageFeature=wallet.features?.['solana:signMessage'];add(wallet.name||'Wallet Standard', {__standard:true,signMessage:signMessageFeature?async message=>{const result=await signMessageFeature.signMessage({account,message}),value=Array.isArray(result)?result[0]:result;if(!value?.signature)throw Error('Wallet Standard message signature missing');return value.signature}:undefined,connect:async()=>{const result=await connect.connect();account=result?.accounts?.[0]||wallet.accounts?.[0]||account;if(!account?.address)throw new Error('wallet did not return a Solana public address');return {publicKey:account.address}},get publicKey(){return account?.address||''},signTransaction:async transaction=>{const bytes=transaction.serialize({requireAllSignatures:false,verifySignatures:false}),result=await sign.signTransaction({account,transaction:bytes}),item=Array.isArray(result)?result[0]:result,signed=item?.signedTransaction||item?.transaction;if(!signed)throw new Error('wallet did not return a signed transaction');return {__signedBytes:signed}}})}return found};
 const connectCandidate=async item=>{let result;try{result=await timeout(item.provider.connect({onlyIfTrusted:false}),15000)}catch(firstError){result=await timeout(item.provider.connect(),15000).catch(()=>{throw firstError})}const payer=publicKeyOf(result)||publicKeyOf(item.provider);if(!payer)throw new Error(item.name+' did not return a public Solana address');await readWalletBalance(payer);if(activePrivatePayWallet?.payer!==payer&&privateBalanceBox)privateBalanceBox.textContent='Shielded USDC: wallet authorization required';activePrivatePayWallet={item,payer};const payerField=document.querySelector('#privatePayPayerAddress');if(payerField)payerField.value=payer;return {item,payer}};
-const readWalletBalance=async payer=>{if(!balanceBox)return;balanceBox.textContent='Reading finalized Solana balances…';try{const response=await fetch('/api/privatepay/wallet-balance?wallet='+encodeURIComponent(payer),{cache:'no-store'}),value=await response.json();if(!response.ok)throw new Error(value.message||value.error||'balance lookup failed');const money=number=>Number(number||0).toLocaleString(undefined,{maximumFractionDigits:6});balanceBox.textContent='Balances · SOL '+money(value.sol?.ui_amount)+' · USDC '+money(value.usdc?.ui_amount)+' · PDAO '+money(value.pdao?.ui_amount)+' · read-only';}catch(error){balanceBox.textContent='Balance lookup unavailable: '+(error.message||String(error));}};
+const readWalletBalance=async payer=>{if(!balanceBox)return;balanceBox.textContent='Reading finalized Solana balances…';try{const response=await fetch('/api/privatepay/wallet-balance?wallet='+encodeURIComponent(payer),{cache:'no-store'}),value=await response.json();if(!response.ok)throw new Error(value.message||value.error||'balance lookup failed');const money=number=>Number(number||0).toLocaleString(undefined,{maximumFractionDigits:6});balanceBox.textContent='Balances · SOL '+money(value.sol?.ui_amount)+' · USDC '+money(value.usdc?.ui_amount)+' · PDAO '+money(value.pdao?.ui_amount)+' · public balance';}catch(error){balanceBox.textContent='Balance lookup unavailable: '+(error.message||String(error));}};
 const readPrivateDelegation=async payer=>{
   const response=await fetch('/api/privatepay/private-balance-status?wallet='+encodeURIComponent(payer),{cache:'no-store'});
   if(!response.ok)throw Error('Private account status unavailable');
@@ -1744,7 +1746,7 @@ const readAuthenticatedBalance=async item=>{
     const {payer}=await connectCandidate(item);
     if(typeof item.provider.signMessage!=='function')
       throw Error('Wallet does not support signMessage. Use Phantom, Solflare, or another compatible Solana wallet.');
-    status.textContent='Requesting MagicBlock challenge. Sign the read-only message to reveal the shielded balance; no funds move.';
+    status.textContent='Requesting MagicBlock wallet challenge. Sign to authorize your private balance; no funds move.';
     const challengeResponse=await fetch('/api/privatepay/private-auth-challenge?wallet='+encodeURIComponent(payer),{cache:'no-store'});
     const challenge=await challengeResponse.json().catch(()=>({}));
     if(!challengeResponse.ok)throw Error(challenge.message||'Private balance challenge unavailable');
@@ -1759,7 +1761,7 @@ const readAuthenticatedBalance=async item=>{
     if(!balanceResponse.ok)throw Error(privateBalance.message||'Authenticated private balance unavailable');
     if(privateBalance.authenticated!==true||privateBalance.wallet!==payer||privateBalance.location!=='ephemeral')
       throw Error('Authenticated private balance binding mismatch');
-    privateBalanceBox.textContent='Shielded USDC: '+privateBalance.amount_usdc+' · authenticated read · Solana Mainnet';
+    privateBalanceBox.textContent='Shielded USDC: '+privateBalance.amount_usdc+' · wallet authenticated · ready for private checkout';
     status.textContent='Wallet-authorized private balance read succeeded. No transaction was signed or broadcast. Pay only after reviewing the exact x402 quote.';
   }catch(error){status.textContent='PRIVATE BALANCE READ: '+(error.message||String(error))}
   finally{readPrivateBalanceButton.disabled=false;}
@@ -1767,7 +1769,7 @@ const readAuthenticatedBalance=async item=>{
 readPrivateBalanceButton?.addEventListener('click',()=>{
   if(activePrivatePayWallet)return void readAuthenticatedBalance(activePrivatePayWallet.item);
   walletAction='balance';walletBox.hidden=false;renderWallets();
-  status.textContent='Choose the wallet that holds the shielded USDC, then approve a read-only message signature.';
+  status.textContent='Choose the wallet holding the shielded USDC, then sign the wallet-ownership challenge. Checkout still requires a separate transaction signature.';
 });
 let topUpAcknowledgedFor='';
 let walletAction='pay';
@@ -3228,6 +3230,8 @@ function errorResponse(error) {
       error: status === 402 ? "payment_required" : "request_failed",
       message,
       ...(privatePayCode ? { code: error.code } : {}),
+      ...(privatePayCode && Number.isInteger(error.provider_status) ? { provider_status: error.provider_status } : {}),
+      ...(privatePayCode && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(String(error.provider_error_code || "")) ? { provider_error_code: error.provider_error_code } : {}),
       ...(privatePayCode && error.status && typeof error.status === "object" ? { privatepay_status: error.status } : {}),
       ...(error.payment_intent ? { payment_intent: error.payment_intent } : {}),
       ...(error.payment_id ? { payment_id: error.payment_id } : {}),
@@ -6322,6 +6326,8 @@ async function handle(e) {
   if (method === "GET" && payPage) return { statusCode: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, body: injectLanguageWidget(paymentPage(decodeURIComponent(payPage[1]))) };
   if (method === "GET" && path === "/mcp")
     return { statusCode: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }, body: mcpLandingPage() };
+  if (method === "GET" && path === "/mcp/privatepay")
+    return json({ name: "privatepay-x402", transport: "streamable-http", endpoint: "https://agents.privatedao.org/mcp/privatepay", authentication: "wallet-signed MagicBlock challenge for private balances", payment_authorization: "separate signed wallet transaction for each payment", network: "solana-mainnet-beta" });
   if (method === "GET" && path === "/a2a")
     return json(card());
   if (method === "POST" && path === "/api/admin/smoke-invoice") {
@@ -6501,11 +6507,11 @@ async function handle(e) {
       receipt: result.receipt,
     });
   }
-  if (method === "POST" && path === "/mcp") return await mcp(body);
+  if (method === "POST" && (path === "/mcp" || path === "/mcp/privatepay")) return await mcp(body, path === "/mcp/privatepay");
   return json({ error: "not_found" }, 404);
 }
 
-async function mcp(request) {
+async function mcp(request, privatePayOnly = false) {
   const id = request.id;
   if (typeof request.method === "string" && request.method.startsWith("notifications/"))
     return { statusCode: 202, headers: { "cache-control": "no-store" }, body: "" };
@@ -6515,7 +6521,7 @@ async function mcp(request) {
       id,
       result: {
         protocolVersion: "2025-06-18",
-        serverInfo: { name: "pdao-agent-exchange", version: "1.7.6" },
+        serverInfo: { name: privatePayOnly ? "pdao-privatepay-x402" : "pdao-agent-exchange", version: "1.7.6" },
         capabilities: { tools: {} },
       },
     });
@@ -6533,6 +6539,8 @@ async function mcp(request) {
     provider_integrations: { type: "object", properties: {}, additionalProperties: false, description: "Explain the commercial role and verified status of each ecosystem integration without exposing credentials." },
     payment_guide: { type: "object", properties: {}, additionalProperties: false, description: "Return the exact quote-first lifecycle, PDAO holder-access path and USDC payment safety rules." },
     execution_guide: { type: "object", properties: {}, additionalProperties: false, description: "Return the endpoints and state transitions needed to request, execute, poll and verify a service." },
+    privatepay_wallet_challenge: { type: "object", properties: { wallet: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$", description: "Solana Mainnet wallet public address only; never a keypair." } }, required: ["wallet"], additionalProperties: false, description: "Request a new wallet-bound MagicBlock authentication challenge. This does not authorize a payment; the wallet must sign the returned exact message locally." },
+    privatepay_private_balance: { type: "object", properties: { wallet: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$" }, challenge: { type: "string", minLength: 1, maxLength: 4096, description: "Challenge issued for this wallet by privatepay_wallet_challenge." }, signature: { type: "string", minLength: 80, maxLength: 100, description: "Base64 Ed25519 signature over the challenge message, signed locally by this wallet." } }, required: ["wallet", "challenge", "signature"], additionalProperties: false, description: "Login to MagicBlock with the signed challenge and read shielded USDC, without returning a bearer token. Never pay or broadcast; a transaction requires separate authorization." },
     privatepay_status: { type: "object", properties: {}, additionalProperties: false, description: "Read the current PrivatePAY x402 readiness, MagicBlock private-rail configuration, facilitator state, PDAO entry requirement, and public-chain privacy boundary. Use this first; it never creates a challenge or payment." },
     privatepay_challenge: { type: "object", properties: { resource: { type: "string", minLength: 1, maxLength: 500, description: "Stable HTTPS resource or service identifier being purchased." }, provider_id: { type: "string", minLength: 1, maxLength: 200, description: "PrivatePAY provider or merchant identifier." }, amount_base_units: { type: "string", pattern: "^[0-9]+$", description: "Quoted USDC amount in token base units, not a decimal display amount." }, mime_type: { type: "string", maxLength: 100, description: "Optional response media type for the purchased resource." }, nonce: { type: "string", maxLength: 200, description: "Optional caller nonce used to bind a fresh challenge." } }, required: ["resource", "provider_id", "amount_base_units"], additionalProperties: false, description: "Create a fresh PrivatePAY x402 v2 challenge after checking rail status. This returns payment requirements and the PDAO private-settlement rule; it does not sign, broadcast, or move funds." },
     privatepay_checkout: { type: "object", properties: { phase: { type: "string", enum: ["create", "challenge"], default: "create", description: "Use create for a new checkout or challenge to request the payment-required response for an existing payment_id." }, payment_id: { type: "string", pattern: "^[a-f0-9]{64}$", description: "Existing 64-character checkout identifier when phase is challenge." }, payer: { type: "string", pattern: "^[1-9A-HJ-NP-Za-km-z]{32,44}$", description: "Solana payer wallet public key; never a private key." }, resource: { type: "string", minLength: 1, maxLength: 2048, description: "HTTPS resource or service endpoint being purchased." }, amount_base_units: { type: "string", pattern: "^[0-9]+$", description: "Quoted USDC amount in base units." }, external_reference: { type: "string", minLength: 1, maxLength: 128, description: "Merchant-owned idempotency or order reference." }, description: { type: "string", maxLength: 256, description: "Human-readable commercial description shown in the checkout response." }, expires_in_seconds: { type: "integer", minimum: 60, maximum: 86400, description: "Challenge lifetime in seconds, between one minute and one day." } }, additionalProperties: false, description: "Create a MagicBlock PrivatePAY checkout or request its x402 payment-required challenge. This is a quote and preparation step: it never signs, broadcasts, or moves funds." },
@@ -6687,6 +6695,8 @@ async function mcp(request) {
     payment_guide: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     execution_guide: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     privatepay_status: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    privatepay_wallet_challenge: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    privatepay_private_balance: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     privatepay_challenge: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     privatepay_checkout: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     privatepay_prepare: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -6724,6 +6734,8 @@ async function mcp(request) {
     payment_guide: "PrivateDAO Commercial Access Guide",
     execution_guide: "PrivateDAO Workflow Guide",
     privatepay_status: "PrivateDAO PrivatePay Architecture",
+    privatepay_wallet_challenge: "PrivatePAY Wallet Auth Challenge",
+    privatepay_private_balance: "PrivatePAY Authenticated Shielded USDC Balance",
     privatepay_challenge: "PrivateDAO Payment Challenge",
     privatepay_checkout: "PrivateDAO Private Checkout",
     privatepay_prepare: "PrivateDAO Payment Preparation",
@@ -6761,6 +6773,8 @@ async function mcp(request) {
     payment_guide: "Learn how organizations move from a quoted request to an authorized commercial workflow with clear payment and evidence steps.",
     execution_guide: "Follow the PrivateDAO workflow from capability selection through request, authorization, progress, result, and evidence receipt.",
     privatepay_status: "Read the current PrivatePAY x402 readiness, MagicBlock private-rail configuration, facilitator state, PDAO entry requirement, and public-chain privacy boundary. Call this first; it is free and read-only, creates no challenge, and never moves funds.",
+    privatepay_wallet_challenge: "Request a MagicBlock Solana Mainnet challenge for the user's public wallet. Ask the user to sign the exact message using the wallet application; no funds move, and the agent never requests a private key.",
+    privatepay_private_balance: "Submit the wallet-signed MagicBlock challenge to log in and read the shielded USDC balance. Private bearer tokens never leave the backend. This is not permission to spend; checkout needs a separate wallet-signed transaction.",
     privatepay_challenge: "Create a fresh PrivatePAY x402 v2 challenge for a resource and quoted USDC amount. Call this before privatepay_verify; it returns exact payment requirements and the PDAO private-settlement rule, but never signs, broadcasts, or charges a wallet.",
     privatepay_checkout: "Create a MagicBlock PrivatePAY checkout or request the payment-required challenge for an existing checkout. Use this to begin a private checkout instead of create_paid_job with direct USDC; it returns commercial terms only and never signs, broadcasts, or moves funds.",
     privatepay_prepare: "Prepare an unsigned MagicBlock deposit, private transfer, or withdrawal for a local wallet to inspect and sign. Call this after privatepay_checkout and before wallet authorization; PrivateDAO never receives a private key and this tool never broadcasts.",
@@ -6836,6 +6850,12 @@ async function mcp(request) {
       task: { type: "string", description: "The original business task." },
       matches: { type: "array", items: { type: "object", additionalProperties: true }, description: "Ranked service manifests to inspect before requesting work." },
       note: { type: "string", description: "Matching and next-step guidance." },
+    }),
+    privatepay_wallet_challenge: structuredOutput("Fresh MagicBlock wallet-bound authentication challenge.", {
+      wallet: { type: "string" }, cluster: { type: "string" }, challenge: { type: "string" }, message: { type: "string" }, expires_at: { type: ["string", "null"] }, requires_wallet_message_signature: { type: "boolean" },
+    }),
+    privatepay_private_balance: structuredOutput("Authenticated shielded USDC balance and transaction-signing boundary.", {
+      wallet: { type: "string" }, mint: { type: "string" }, cluster: { type: "string" }, location: { type: "string" }, amount_base_units: { type: "string" }, amount_usdc: { type: "string" }, authenticated: { type: "boolean" }, payment_requires_separate_transaction_signature: { type: "boolean" },
     }),
     privatepay_status: structuredOutput("Fail-closed PrivatePAY readiness and privacy status.", {
       enabled: { type: "boolean", description: "Whether the private settlement rail is currently enabled for new payment operations." },
@@ -6946,6 +6966,8 @@ async function mcp(request) {
     "get_provider_integrations",
     "service_recommendation",
     "privatepay_status",
+    "privatepay_wallet_challenge",
+    "privatepay_private_balance",
     "privatepay_challenge",
     "privatepay_checkout",
     "privatepay_prepare",
@@ -6964,13 +6986,15 @@ async function mcp(request) {
     inputSchema: schemas[name] || { type: "object", additionalProperties: false },
     outputSchema: outputSchemas[name] || genericOutput("Structured PrivateDAO tool response."),
     annotations: annotations[name],
-  }));
+  })).filter((tool) => !privatePayOnly || tool.name.startsWith("privatepay_"));
   if (request.method === "tools/list")
     return json({ jsonrpc: "2.0", id, result: { tools } });
   if (request.method === "tools/call") {
     const name = request.params?.name,
       a = request.params?.arguments || {};
     try {
+      if (privatePayOnly && !tools.some((tool) => tool.name === name))
+        throw Object.assign(new Error("Tool is unavailable on the dedicated PrivatePAY MCP endpoint"), { statusCode: 400, code: "PRIVATEPAY_MCP_TOOL_NOT_ALLOWED" });
       let result;
       if (name === "get_workflow_guide") {
         const topic = String(a.topic || "overview").trim().toLowerCase();
@@ -7035,6 +7059,8 @@ async function mcp(request) {
         rules: ["quote first", "do not pay an amount from catalog text alone", "do not send private keys or seed phrases", "target network is separate from payment network", "PDAO holder access uses a signed wallet challenge and sends no transaction", "PrivatePAY x402 is optional for paid services and is not available for free services", "do not substitute PDAO for the quoted USDC payment intent", "payment is not execution authorization for writes", "HTTP 409 recovery_required means do not replay the payment or service"],
       };
       else if (name === "privatepay_status") result = await probePrivatePayRail(config);
+      else if (name === "privatepay_wallet_challenge") result = await requestPrivatePayWalletChallenge(config, String(a.wallet || ""));
+      else if (name === "privatepay_private_balance") result = await readAuthenticatedPrivatePayBalance(config, a);
       else if (name === "privatepay_challenge") result = await createPrivatePayChallenge(config, a, await privatePayReadiness());
       else if (name === "privatepay_checkout") result = String(a.phase || "create").trim().toLowerCase() === "challenge"
         ? await requestPrivatePayCheckoutChallenge(config, a)
