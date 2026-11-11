@@ -47,7 +47,7 @@ test("wallet signing authorizes exact shielded USDC read and hides bearer token"
   assert.equal(calls.length, 2);
   assert.deepEqual({ wallet: read.wallet, amount_base_units: read.amount_base_units, amount_usdc: read.amount_usdc, authenticated: read.authenticated, source: read.source },
     { wallet, amount_base_units: "1000000", amount_usdc: "1.000000", authenticated: true, source: "magicblock_wallet_authorized_private_balance" });
-  assert.doesNotMatch(JSON.stringify(read), /private-bearer-fixture|nonce-123|signature/);
+  assert.doesNotMatch(JSON.stringify(read), /private-bearer-fixture|nonce-123|"signature":/);
   assert.equal(read.payment_requires_separate_transaction_signature, true);
   assert.equal("read_only" in read, false);
 });
