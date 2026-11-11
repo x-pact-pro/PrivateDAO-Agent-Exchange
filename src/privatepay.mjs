@@ -604,24 +604,43 @@ function checkoutResponseBody(payload, providerStatus = 200) {
   };
 }
 
-export async function checkPrivatePayPayerDelegation(config, payer, fetchImpl = fetch) {
+// Public delegation metadata is not a private balance. Never infer a shielded
+// USDC amount from this endpoint or request another deposit automatically.
+export async function readPrivatePayPayerDelegationState(config, payer, fetchImpl = fetch) {
+  if (!SOLANA_ADDRESS.test(String(payer || "")))
+    throw Object.assign(new Error("payer must be a valid Solana address"), { statusCode: 400, code: "PRIVATEPAY_INVALID_PAYER" });
   const url = new URL(privatePayProviderUrl(config, "/v1/spl/balance"));
   url.search = new URLSearchParams({ address: payer, mint: config.privatePayConfidentialMint, cluster: MAGICBLOCK_PRIVATE_CLUSTER }).toString();
-  // The challenge remains authoritative if the optional read is unavailable.
-  let balance;
   try {
-    const response = await fetchImpl(url, { signal: AbortSignal.timeout(3000) });
-    if (!response.ok) return;
-    balance = await response.json();
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) return { status: "unavailable", provider_status: response.status, validator_matches: null, private_balance_verified: false, private_balance_usdc: null };
+    const body = await response.json();
+    const delegation = body?.delegation && typeof body.delegation === "object" ? body.delegation : {};
+    const status = delegation.status === "delegated" || delegation.status === "undelegated" ? delegation.status : "unknown";
+    const validator = typeof delegation.validator === "string" ? delegation.validator : null;
+    return {
+      status,
+      validator_matches: status === "delegated" && validator ? validator === magicBlockValidator(config) : null,
+      // Authenticated /v1/spl/private-balance must be used before claiming a
+      // private amount. An ordinary public balance or deposit is not proof.
+      private_balance_verified: false,
+      private_balance_usdc: null,
+    };
   } catch {
-    return;
+    return { status: "unavailable", validator_matches: null, private_balance_verified: false, private_balance_usdc: null };
   }
-  const delegation = balance?.delegation;
-  if (delegation?.status === "undelegated" ||
-      (delegation?.status === "delegated" && delegation.validator && delegation.validator !== magicBlockValidator(config))) {
-    throw Object.assign(new Error("Use Set up private USDC on this page to initialize and fund your private Mainnet balance, then choose wallet and pay."), {
-      statusCode: 422, code: "PRIVATEPAY_PAYER_DELEGATION_REQUIRED",
-    });
+}
+
+export async function checkPrivatePayPayerDelegation(config, payer, fetchImpl = fetch) {
+  // Optional preflight; an unreachable read must not override the provider's
+  // authoritative x402 challenge response.
+  const state = await readPrivatePayPayerDelegationState(config, payer, fetchImpl);
+  if (state.status === "undelegated" || state.validator_matches === false) {
+    throw Object.assign(new Error(
+      state.validator_matches === false
+        ? "MagicBlock reports a different private validator for this wallet. Do not shield again; reconcile the existing private balance before checkout."
+        : "MagicBlock reports this wallet as undelegated. If you already have shielded USDC, do not deposit again; verify the private account state before checkout."
+    ), { statusCode: 422, code: "PRIVATEPAY_PAYER_DELEGATION_REQUIRED", delegation_status: state.status });
   }
 }
 
