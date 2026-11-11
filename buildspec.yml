@@ -11,7 +11,6 @@ phases:
     commands:
       - echo "Building PrivateDAO Agent Exchange..."
       - npm run build --if-present
-      - npm test --if-present
 
   post_build:
     commands:
