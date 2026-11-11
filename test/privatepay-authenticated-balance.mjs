@@ -20,9 +20,11 @@ test("MagicBlock challenge is wallet-bound, read-only and Mainnet only", async (
     assert.equal(url.searchParams.get("cluster"), "mainnet");
     return reply(200, { challenge: "nonce-123", message: "Sign challenge nonce-123", expiresAt: "2026-11-11T03:00:00Z" });
   });
-  assert.deepEqual({ wallet: challenge.wallet, cluster: challenge.cluster, challenge: challenge.challenge, message: challenge.message, read_only: challenge.read_only }, {
-    wallet, cluster: "mainnet", challenge: "nonce-123", message: "Sign challenge nonce-123", read_only: true,
+  assert.deepEqual({ wallet: challenge.wallet, cluster: challenge.cluster, challenge: challenge.challenge, message: challenge.message, authorization_purpose: challenge.authorization_purpose }, {
+    wallet, cluster: "mainnet", challenge: "nonce-123", message: "Sign challenge nonce-123", authorization_purpose: "read_shielded_balance",
   });
+  assert.equal(challenge.payment_requires_separate_transaction_signature, true);
+  assert.equal("read_only" in challenge, false);
 });
 
 test("wallet signing authorizes exact shielded USDC read and hides bearer token", async () => {
@@ -46,6 +48,8 @@ test("wallet signing authorizes exact shielded USDC read and hides bearer token"
   assert.deepEqual({ wallet: read.wallet, amount_base_units: read.amount_base_units, amount_usdc: read.amount_usdc, authenticated: read.authenticated, source: read.source },
     { wallet, amount_base_units: "1000000", amount_usdc: "1.000000", authenticated: true, source: "magicblock_wallet_authorized_private_balance" });
   assert.doesNotMatch(JSON.stringify(read), /private-bearer-fixture|nonce-123|signature/);
+  assert.equal(read.payment_requires_separate_transaction_signature, true);
+  assert.equal("read_only" in read, false);
 });
 
 test("private account data from another wallet is rejected", async () => {
@@ -94,4 +98,17 @@ test("merchant checkout validates treasury payTo before signing and surfaces pri
   assert.match(source, /id="privatePayReadPrivateBalance"/);
   assert.match(source, /id="privatePayPrivateBalance"/);
   assert.doesNotMatch(source, /privatePayX402.*rawSecret/i);
+});
+
+
+test("provider 400 is actionable and exposes only safe error codes", async () => {
+  await assert.rejects(
+    readAuthenticatedPrivatePayBalance(cfg, { wallet, challenge: "nonce", signature }, async (url) =>
+      String(url).endsWith("/v1/spl/login")
+        ? reply(200, { token: "private-bearer-fixture" })
+        : reply(400, { error: { code: "ACCOUNT_NOT_READY", message: "private user payload must never be logged" } })),
+    (error) => error.statusCode === 422 && error.code === "PRIVATEPAY_PRIVATE_BALANCE_REJECTED"
+      && error.provider_status === 400 && error.provider_error_code === "ACCOUNT_NOT_READY"
+      && !String(error.message).includes("private user payload"),
+  );
 });
