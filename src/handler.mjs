@@ -5907,7 +5907,7 @@ async function handle(e) {
       merchant_pay_to_matches_treasury: address(treasury) && payTo === treasury,
       payment_ingress: config.privatePayPaymentIngress || null,
       shield_and_checkout_are_distinct_operations: true,
-      merchant_settlement_reconciled: false,
+      merchant_settlement_reconciled: null,
       note: "An agreed merchant payTo is not evidence of payment. Settlement requires independent finalized proof and reconciliation.",
       read_only: true,
     });
