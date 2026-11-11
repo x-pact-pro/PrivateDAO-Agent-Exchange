@@ -480,7 +480,7 @@ test("generic PrivatePAY x402 endpoint performs verify and settle with a redacte
         amount: "1000",
         payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
-        extra: { paymentId: "a".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+        extra: { paymentId: "a".repeat(64), payer: checkoutRequest.payer, merchantId: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL", resource: checkoutRequest.resource, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
       return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource }, accepts: [accepted] }) } });
     }
@@ -552,7 +552,7 @@ test("generic PrivatePAY x402 recovers a MagicBlock checkout 409 with a fresh ch
         amount: "1000",
         payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
-        extra: { paymentId: "c".repeat(64), cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+        extra: { paymentId: "c".repeat(64), payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6", merchantId: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL", resource: "https://agents.example/api/retry", cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
       return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "https://agents.example/api/retry" }, accepts: [accepted] }) } });
     }
@@ -596,7 +596,7 @@ test("generic PrivatePAY x402 recovers when the retry includes the failed paymen
         amount: "1000",
         payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
-        extra: { paymentId: paymentIds[2], cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+        extra: { paymentId: paymentIds[2], payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6", merchantId: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL", resource: "https://agents.example/api/retry-with-id", cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
       return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: "https://agents.example/api/retry-with-id" }, accepts: [accepted] }) } });
     }
@@ -652,7 +652,7 @@ test("generic PrivatePAY x402 resumes a pending checkout by payment id", async (
         amount: "1000",
         payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
-        extra: { paymentId: checkoutPayment, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+        extra: { paymentId: checkoutPayment, payer: checkoutRequest.payer, merchantId: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL", resource: checkoutRequest.resource, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
       return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource }, accepts: [accepted] }) } });
     }
@@ -701,7 +701,7 @@ test("generic PrivatePAY x402 isolates checkout bindings per payer", async () =>
         amount: "1000",
         payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
         maxTimeoutSeconds: 60,
-        extra: { paymentId, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+        extra: { paymentId, payer: paymentId === "f".repeat(64) ? "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6" : "H2qTahnGPy83GZ3H29eHk5sG6bGZLPRATUPvVKfCrqsi", merchantId: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL", resource: checkoutRequest.resource, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
       };
       return new Response(JSON.stringify({}), { status: 402, headers: { "content-type": "application/json", "PAYMENT-REQUIRED": encodePaymentRequiredHeader({ x402Version: 2, resource: { url: checkoutRequest.resource }, accepts: [accepted] }) } });
     }
