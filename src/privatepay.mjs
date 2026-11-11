@@ -687,7 +687,7 @@ export async function readAuthenticatedPrivatePayBalance(config, input = {}, fet
     throw Object.assign(new Error("MagicBlock rejected wallet authorization"), { statusCode: 403, code: "PRIVATEPAY_AUTH_LOGIN_REJECTED", provider_status: loginResponse.status });
   const login = await loginResponse.json().catch(() => ({}));
   const token = typeof login.token === "string" ? login.token : "";
-  if (!token || token.length > 8192 || /[\\r\\n]/.test(token))
+  if (!token || token.length > 8192 || /[\r\n]/.test(token))
     throw Object.assign(new Error("MagicBlock login did not issue a valid session"), { statusCode: 503, code: "PRIVATEPAY_AUTH_TOKEN_INVALID" });
   const url = new URL(privatePayProviderUrl(config, "/v1/spl/private-balance"));
   url.search = new URLSearchParams({ address: wallet, mint: config.privatePayConfidentialMint, cluster }).toString();
