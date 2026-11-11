@@ -7153,6 +7153,9 @@ async function mcp(request, privatePayOnly = false) {
       const diagnostic = {
         error: publicErrorMessage(error),
         statusCode: error.statusCode || 400,
+        ...(/^PRIVATEPAY_[A-Z0-9_]+$/.test(String(error.code || "")) ? { code: error.code } : {}),
+        ...(Number.isInteger(error.provider_status) ? { provider_status: error.provider_status } : {}),
+        ...(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(String(error.provider_error_code || "")) ? { provider_error_code: error.provider_error_code } : {}),
         ...(error.upstreamStatus ? { upstreamStatus: error.upstreamStatus } : {}),
       };
       return json({
