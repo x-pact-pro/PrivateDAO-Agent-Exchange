@@ -631,6 +631,97 @@ export async function readPrivatePayPayerDelegationState(config, payer, fetchImp
   }
 }
 
+// MagicBlock private reads require wallet-signed challenge/login. The private
+// bearer token is deliberately consumed inside one backend request and is never
+// returned to the browser or persisted in a database or log.
+export async function requestPrivatePayWalletChallenge(config, wallet, fetchImpl = fetch) {
+  if (!SOLANA_ADDRESS.test(String(wallet || "")))
+    throw Object.assign(new Error("A valid Solana wallet is required"), { statusCode: 400, code: "PRIVATEPAY_INVALID_WALLET" });
+  const url = new URL(privatePayProviderUrl(config, "/v1/spl/challenge"));
+  url.search = new URLSearchParams({ pubkey: wallet, cluster: providerCluster(config) }).toString();
+  let response;
+  try {
+    response = await fetchImpl(url, { signal: AbortSignal.timeout(8000) });
+  } catch {
+    throw Object.assign(new Error("MagicBlock wallet challenge is unavailable"), { statusCode: 503, code: "PRIVATEPAY_AUTH_CHALLENGE_UNAVAILABLE" });
+  }
+  if (!response.ok)
+    throw Object.assign(new Error("MagicBlock wallet challenge was rejected"), { statusCode: 503, code: "PRIVATEPAY_AUTH_CHALLENGE_REJECTED", provider_status: response.status });
+  const body = await response.json().catch(() => ({}));
+  if (typeof body.challenge !== "string" || !body.challenge || body.challenge.length > 4096
+      || (body.message != null && (typeof body.message !== "string" || body.message.length > 4096)))
+    throw Object.assign(new Error("MagicBlock returned an invalid wallet challenge"), { statusCode: 503, code: "PRIVATEPAY_AUTH_CHALLENGE_INVALID" });
+  return {
+    wallet,
+    cluster: providerCluster(config),
+    challenge: body.challenge,
+    message: body.message || body.challenge,
+    expires_at: typeof body.expiresAt === "string" ? body.expiresAt : null,
+    read_only: true,
+    requires_wallet_message_signature: true,
+  };
+}
+
+export async function readAuthenticatedPrivatePayBalance(config, input = {}, fetchImpl = fetch) {
+  const wallet = String(input.wallet || "").trim();
+  const challenge = String(input.challenge || "");
+  const signature = String(input.signature || "");
+  if (!SOLANA_ADDRESS.test(wallet))
+    throw Object.assign(new Error("A valid Solana wallet is required"), { statusCode: 400, code: "PRIVATEPAY_INVALID_WALLET" });
+  if (!challenge || challenge.length > 4096 || !/^[A-Za-z0-9+/]+={0,2}$/.test(signature)
+      || Buffer.from(signature, "base64").length !== 64)
+    throw Object.assign(new Error("A signed MagicBlock wallet challenge is required"), { statusCode: 400, code: "PRIVATEPAY_AUTH_SIGNATURE_INVALID" });
+  const cluster = providerCluster(config);
+  let loginResponse;
+  try {
+    loginResponse = await fetchImpl(privatePayProviderUrl(config, "/v1/spl/login"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pubkey: wallet, challenge, signature, cluster }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    throw Object.assign(new Error("MagicBlock private authorization is unavailable"), { statusCode: 503, code: "PRIVATEPAY_AUTH_LOGIN_UNAVAILABLE" });
+  }
+  if (!loginResponse.ok)
+    throw Object.assign(new Error("MagicBlock rejected wallet authorization"), { statusCode: 403, code: "PRIVATEPAY_AUTH_LOGIN_REJECTED", provider_status: loginResponse.status });
+  const login = await loginResponse.json().catch(() => ({}));
+  const token = typeof login.token === "string" ? login.token : "";
+  if (!token || token.length > 8192 || /[\\r\\n]/.test(token))
+    throw Object.assign(new Error("MagicBlock login did not issue a valid session"), { statusCode: 503, code: "PRIVATEPAY_AUTH_TOKEN_INVALID" });
+  const url = new URL(privatePayProviderUrl(config, "/v1/spl/private-balance"));
+  url.search = new URLSearchParams({ address: wallet, mint: config.privatePayConfidentialMint, cluster }).toString();
+  let balanceResponse;
+  try {
+    balanceResponse = await fetchImpl(url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) });
+  } catch {
+    throw Object.assign(new Error("MagicBlock authenticated private balance is unavailable"), { statusCode: 503, code: "PRIVATEPAY_PRIVATE_BALANCE_UNAVAILABLE" });
+  }
+  if (!balanceResponse.ok)
+    throw Object.assign(new Error("MagicBlock refused the authenticated private balance read"), { statusCode: 503, code: "PRIVATEPAY_PRIVATE_BALANCE_REJECTED", provider_status: balanceResponse.status });
+  const balance = await balanceResponse.json().catch(() => ({}));
+  // Fail closed on a mismatched owner, mint, or location. Never accept ordinary
+  // public USDC account balances as evidence of shielded USDC.
+  if (balance.address !== wallet || balance.mint !== config.privatePayConfidentialMint || balance.location !== "ephemeral")
+    throw Object.assign(new Error("MagicBlock private balance does not match the authenticated wallet and asset"), { statusCode: 503, code: "PRIVATEPAY_PRIVATE_BALANCE_BINDING_MISMATCH" });
+  const raw = typeof balance.balance === "number" && Number.isSafeInteger(balance.balance)
+    ? String(balance.balance) : typeof balance.balance === "string" ? balance.balance : "";
+  if (!/^(0|[1-9][0-9]*)$/.test(raw) || raw.length > 25)
+    throw Object.assign(new Error("MagicBlock private balance returned an invalid amount"), { statusCode: 503, code: "PRIVATEPAY_PRIVATE_BALANCE_AMOUNT_INVALID" });
+  const amount = BigInt(raw);
+  return {
+    wallet,
+    mint: config.privatePayConfidentialMint,
+    cluster,
+    location: "ephemeral",
+    amount_base_units: String(amount),
+    amount_usdc: `${amount / 1000000n}.${String(amount % 1000000n).padStart(6, "0")}`,
+    authenticated: true,
+    read_only: true,
+    source: "magicblock_wallet_authorized_private_balance",
+  };
+}
+
 export async function checkPrivatePayPayerDelegation(config, payer, fetchImpl = fetch) {
   // Optional preflight; an unreachable read must not override the provider's
   // authoritative x402 challenge response.
