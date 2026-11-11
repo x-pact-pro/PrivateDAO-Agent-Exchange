@@ -85,6 +85,10 @@ test("merchant checkout validates treasury payTo before signing and surfaces pri
   assert.match(source, /\/api\/privatepay\/route-audit/);
   assert.match(source, /merchant_pay_to_matches_treasury/);
   assert.match(source, /accepted\.payTo!==route\.privatepay_x402_pay_to/);
+  assert.match(source, /accepted\.extra\?\.payer!==payer/);
+  assert.match(source, /accepted\.extra\?\.merchantId!==route\.privatepay_x402_pay_to/);
+  assert.match(source, /\["payer", provider\?\.extra\?\.payer, expectedPayer\]/);
+  assert.match(source, /\["merchant_id", provider\?\.extra\?\.merchantId, local\?\.payTo\]/);
   assert.match(source, /\/api\/privatepay\/private-auth-challenge/);
   assert.match(source, /\/api\/privatepay\/private-balance/);
   assert.match(source, /id="privatePayReadPrivateBalance"/);
