@@ -3,7 +3,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      nodejs: 22
+      nodejs: 20
     commands:
       - npm ci
 
@@ -14,8 +14,8 @@ phases:
 
   post_build:
     commands:
-      - echo "Build complete"
-      - zip -r function.zip . -x "*.git*" -x "node_modules/aws-sdk/*"
+      - echo "Packaging Lambda..."
+      - zip -r function.zip src/ node_modules/ package.json -x "node_modules/aws-sdk/*"
 
 artifacts:
   files:
