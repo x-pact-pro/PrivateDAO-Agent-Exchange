@@ -43,6 +43,7 @@ import { calculatePdaoSellerListingBenefit, issuePdaoChallenge, publicPdaoBenefi
 import { runScheduledSellerSettlements } from "./settlement.mjs";
 import { HandshakeReplayCache, readSealReputation, sealkeeperFailure } from "./sealkeeper.mjs";
 import { buildPrivatePayPdaoFeeTransaction, createPrivatePayChallenge, createPrivatePayCheckout, createPrivatePayPaymentLinkCheckout, createPrivatePayRequirements, decodePrivatePayRequiredHeader, decodePrivatePaySignature, preparePrivatePayDeposit, preparePrivatePayTransfer, preparePrivatePayWithdrawal, privatePayFacilitatorRequest, privatePayMagicBlockFacilitatorRequest, privatePayStatus, probePrivatePayRail, publicPrivatePayFacilitatorResult, requestPrivatePayCheckoutChallenge, verifyPrivatePayMainnetSettlement, verifyPrivatePayPdaoFee, PRIVATEPAY_SERVICE_ID } from "./privatepay.mjs";
+import { DEFAULT_PRIVATEPAY_TEE_RPC } from "./privatepay-mainnet.mjs";
 import { authorizePrivatePayAutopilotOperation, cancelPrivatePayAutopilotOperation, completePrivatePayAutopilotOperation, createPrivatePayAutopilotChallenge, createPrivatePayAutopilotOperationChallenge, createPrivatePayAutopilotPolicy, privatePayAutopilotStatus, revokePrivatePayAutopilotPolicy, validatePrivatePayAutopilotOperation } from "./privatepay-autopilot.mjs";
 import { handleAlibabaSpi } from "./alibaba-marketplace.mjs";
 import { encodePaymentResponseHeader } from "@x402/core/http";
@@ -53,6 +54,8 @@ const config = getConfig();
 const privatePayReadiness = () => process.env.AGENT_EXCHANGE_TEST_MODE === "true"
   ? Promise.resolve(privatePayStatus(config))
   : probePrivatePayRail(config);
+const privatePayBalancePreflightEnabled = () => process.env.AGENT_EXCHANGE_TEST_MODE !== "true"
+  || process.env.PRIVATEPAY_BALANCE_PREFLIGHT === "true";
 let storePromise;
 let configPromise;
 const store = () => (storePromise ||= createStore(config));
@@ -1774,6 +1777,7 @@ const privatePayAmount=document.querySelector('#privatePayAmount');
 const privatePayStatus=document.querySelector('#servicePaymentStatus');
 let privatePayWallet=null;
 let privatePayPayer='';
+let privatePayBalance=null;
 const privatePayProvider=()=>window.solflare?.solana||window.solflare||window.phantom?.solana||window.phantom||window.solana;
 const privatePayAddress=value=>{const key=value?.publicKey||value?.account?.address||value?.accounts?.[0]?.address;return typeof key==='string'?key:key?.toBase58?.()||key?.toString?.()||''};
 const privatePayEncode=bytes=>{let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);return btoa(binary).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'')};
@@ -1789,7 +1793,17 @@ async function connectPrivatePayWallet(){
   if(!privatePayPayer)throw Error('Wallet connected but did not return a public Solana address. Unlock the wallet and try again.');
   privatePayWallet=wallet;
   privatePayButton.textContent='Request payment';
-  privatePayStatus.textContent='Wallet connected: '+privatePayPayer+'\\nNo transaction has been signed.';
+  privatePayStatus.textContent='Wallet connected. Reading finalized Mainnet balances…';
+  try{
+    const balanceResponse=await fetch('/api/privatepay/wallet-balance?wallet='+encodeURIComponent(privatePayPayer),{cache:'no-store'});
+    const balance=await balanceResponse.json().catch(()=>({}));
+    if(!balanceResponse.ok)throw new Error(balance.message||balance.error||'balance lookup failed');
+    privatePayBalance={usdc:Number(balance.usdc?.ui_amount||0),sol:Number(balance.sol?.ui_amount||0)};
+    privatePayStatus.textContent='Wallet connected: '+privatePayPayer+'\\nUSDC '+privatePayBalance.usdc.toFixed(6)+' · SOL '+privatePayBalance.sol.toFixed(6)+'\\nNo transaction has been signed.';
+  }catch(error){
+    privatePayBalance=null;
+    privatePayStatus.textContent='Wallet connected: '+privatePayPayer+'\\nBalance preflight unavailable: '+(error.message||String(error))+'\\nNo transaction has been signed.';
+  }
 }
 async function requestPrivatePay(){
   if(!privatePayWallet||!privatePayPayer)return connectPrivatePayWallet();
@@ -1797,13 +1811,19 @@ async function requestPrivatePay(){
   try{
     const privatePayAttempt=crypto.randomUUID();
     const amountBaseUnits=privatePayUnits();
+    if(privatePayBalance && privatePayBalance.usdc < Number(amountBaseUnits)/1000000)
+      throw Error('This wallet does not have enough Mainnet USDC for the requested payment. No transaction was signed.');
     privatePayStatus.textContent='Requesting an exact MagicBlock x402 challenge…';
     const resource=location.origin+'/services/privatepay-x402';
     const first=await fetch('/api/privatepay/x402',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({payer:privatePayPayer,resource,provider_id:'privatepay.x402',amount_base_units:amountBaseUnits,nonce:privatePayAttempt,external_reference:'privatepay-ui-'+privatePayAttempt,pdao_optional:true})});
     const firstBody=await first.json().catch(()=>({}));
     const requiredHeader=first.headers.get('PAYMENT-REQUIRED');
     if(first.status!==402||!requiredHeader){
-      const reason=firstBody.code==='PRIVATEPAY_CHECKOUT_DISABLED'?'Merchant checkout is not activated on the production rail yet.':(firstBody.message||firstBody.error||'MagicBlock payment challenge unavailable');
+      const reason=first.status===409
+        ? 'MagicBlock rejected the checkout challenge for this payer (409). No transaction was signed. Confirm this wallet has Mainnet USDC and an initialized/delegated private USDC account, then start a fresh checkout. Do not retry the same checkout repeatedly.'
+        : firstBody.code==='PRIVATEPAY_CHECKOUT_DISABLED'
+          ? 'Merchant checkout is not activated on the production rail yet.'
+          : (firstBody.message||firstBody.error||'MagicBlock payment challenge unavailable');
       throw Error(reason);
     }
     const required=JSON.parse(new TextDecoder().decode(privatePayDecode(requiredHeader))),accepted=required.accepts?.[0],raw=accepted?.extra?.transaction;
@@ -5775,6 +5795,60 @@ async function handle(e) {
       pdao_selected: requirements.pdao.selected === true,
       pdao_fee_base_units: requirements.pdao.selected === true ? String(requirements.pdao.fee_base_units || "") : null,
     };
+    const paymentSignature = e.headers?.["PAYMENT-SIGNATURE"] || e.headers?.["payment-signature"];
+    if (!paymentSignature && privatePayBalancePreflightEnabled()) {
+      const payerBalance = await readPrivatePayWalletBalance(checkoutBinding.payer);
+      const quotedUsdc = BigInt(checkoutBinding.amount_base_units);
+      const availableUsdc = BigInt(payerBalance.usdc?.base_units || "0");
+      if (availableUsdc < quotedUsdc) {
+        throw Object.assign(new Error("payer wallet has insufficient Mainnet USDC for this checkout; no payment was created"), {
+          statusCode: 402,
+          code: "PRIVATEPAY_PAYER_USDC_INSUFFICIENT",
+          available_base_units: availableUsdc.toString(),
+          required_base_units: quotedUsdc.toString(),
+        });
+      }
+      // FIX #1: Validate MagicBlock private balance delegation BEFORE allowing PDAO fee charge
+      // This prevents users from being charged 0.05 USDC if MagicBlock will reject their delegation
+      if (requirements.pdao.selected === true) {
+        try {
+          // Attempt to verify the payer has a valid MagicBlock delegation
+          // This is a non-blocking probe - if it fails we log but don't block
+          const probeMagicBlockDelegation = async () => {
+            const teeUrl = DEFAULT_PRIVATEPAY_TEE_RPC;
+            const delegationCheckUrl = `${teeUrl}/validator/MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo/private-balance?wallet=${encodeURIComponent(checkoutBinding.payer)}`;
+            try {
+              const resp = await fetch(delegationCheckUrl, { signal: AbortSignal.timeout(3000) });
+              if (!resp.ok && resp.status !== 404) {
+                // If we get an error that suggests delegation issue, fail the request
+                if (resp.status === 400 || resp.status === 403) {
+                  const errText = await resp.text().catch(() => "");
+                  if (errText.includes("delegat") || errText.includes("private")) {
+                    throw Object.assign(
+                      new Error("MagicBlock rejected this wallet's private-balance account query. Reconcile the existing delegated account; do not make another deposit."),
+                      { statusCode: 403, code: "PRIVATEPAY_DELEGATION_VALIDATION_FAILED" }
+                    );
+                  }
+                }
+              }
+            } catch (err) {
+              if (err.statusCode === 403) throw err;
+              // Other errors (timeout, network) don't block - log and continue
+              console.warn(JSON.stringify({
+                event: "privatepay_delegation_probe_failed",
+                payer: checkoutBinding.payer,
+                reason: err.message,
+                attempt: "pre_fee_validation",
+              }));
+            }
+          };
+          await probeMagicBlockDelegation();
+        } catch (delegationError) {
+          // Re-throw delegation errors so user gets clear feedback before paying PDAO fee
+          throw delegationError;
+        }
+      }
+    }
     const bindingMatches = (record) => record
       && record.payer === checkoutBinding.payer
       && record.resource === checkoutBinding.resource
@@ -5796,7 +5870,6 @@ async function handle(e) {
     };
     const checkoutTerminal = (record) => ["paid", "settled", "expired", "failed", "settlement_failed"].includes(record?.state);
     const reusableCheckout = (record) => Boolean(record?.payment_id && !checkoutTerminal(record) && !checkoutExpired(record));
-    const paymentSignature = e.headers?.["PAYMENT-SIGNATURE"] || e.headers?.["payment-signature"];
     if (!paymentSignature) {
       const suppliedPaymentId = String(x402Input.payment_id || x402Input.paymentId || "").trim();
       const paymentKey = suppliedPaymentId ? `privatepay_checkout_${suppliedPaymentId}` : null;
@@ -5891,13 +5964,33 @@ async function handle(e) {
     const verification = await privatePayMagicBlockFacilitatorRequest(config, "verify", paymentPayload);
     if (verification.status === "pending")
       return json({ error: "privatepay_verification_pending", request_id: requirements.request_id, payment_id: verification.payment_id, status: "pending", retry_after_seconds: verification.retry_after_seconds || 2 }, 202, { "retry-after": String(verification.retry_after_seconds || 2) });
-    if (verification.isValid !== true)
+    if (verification.isValid !== true) {
+      // FIX #2: On verification failure, record for potential refund processing
+      const failureRecord = { ...checkoutBinding, payment_id: signedPaymentId || null, state: "verification_failed", failed_at: now(), verification_result: verification, pdao_fee_charged: pdaoFee.signature ? true : false, updated_at: now() };
+      await checkoutStore.put("Payments", requestKey, failureRecord);
+      if (signedPaymentId) await checkoutStore.put("Payments", `privatepay_checkout_${signedPaymentId}`, failureRecord);
       return json({ error: "privatepay_payment_invalid", request_id: requirements.request_id, status: "rejected" }, 402);
-    const settlement = await privatePayMagicBlockFacilitatorRequest(config, "settle", paymentPayload);
+    }
+    let settlement;
+    try {
+      settlement = await privatePayMagicBlockFacilitatorRequest(config, "settle", paymentPayload);
+    } catch (settleError) {
+      // FIX #2: On settlement error, record the failure but don't crash
+      const failureRecord = { ...checkoutBinding, payment_id: signedPaymentId || null, state: "settlement_failed", failed_at: now(), settlement_error: String(settleError.message).slice(0, 200), pdao_fee_charged: pdaoFee.signature ? true : false, updated_at: now() };
+      await checkoutStore.put("Payments", requestKey, failureRecord);
+      if (signedPaymentId) await checkoutStore.put("Payments", `privatepay_checkout_${signedPaymentId}`, failureRecord);
+      // Re-throw to return error to user
+      throw settleError;
+    }
     if (settlement.status === "pending")
       return json({ error: "privatepay_settlement_pending", request_id: requirements.request_id, payment_id: settlement.payment_id, status: "pending", retry_after_seconds: settlement.retry_after_seconds || 2 }, 202, { "retry-after": String(settlement.retry_after_seconds || 2) });
-    if (settlement.success !== true)
+    if (settlement.success !== true) {
+      // FIX #2: Settlement failed - record for refund processing
+      const failureRecord = { ...checkoutBinding, payment_id: signedPaymentId || null, state: "settlement_failed", failed_at: now(), settlement_result: settlement, pdao_fee_charged: pdaoFee.signature ? true : false, updated_at: now() };
+      await checkoutStore.put("Payments", requestKey, failureRecord);
+      if (signedPaymentId) await checkoutStore.put("Payments", `privatepay_checkout_${signedPaymentId}`, failureRecord);
       return json({ error: "privatepay_settlement_unconfirmed", request_id: requirements.request_id, status: "pending" }, 503);
+    }
     const onchainVerification = await verifyPrivatePayMainnetSettlement(config, {
       requestId: requirements.request_id,
       amountBaseUnits: requirements.requirements.accepts[0].amount,
@@ -5908,13 +6001,38 @@ async function handle(e) {
       if (!completion.completed)
         return json({ error: "privatepay_autopilot_accounting_pending", request_id: requirements.request_id, operation_id: x402Input.autopilot_operation_id, status: "pending" }, 503);
     }
+    // FIX #3: Trigger quest completion if this is a MagicBlock private payment
+    let questResult = { attempted: false };
+    if (onchainVerification.status === "finalized" && config.questline?.questId === 111) {
+      try {
+        const storage = await store();
+        const participationId = `questline_participation_111_${x402Input.payer}`;
+        const participation = await storage.get("Registry", participationId);
+        if (participation) {
+          questResult = await validateAndPushQuest({
+            storage,
+            client: createQuestlineClient({ config: config.questline, logger: (entry) => console.info(JSON.stringify(entry)) }),
+            config: config.questline,
+            wallet: x402Input.payer,
+            participationId: participation.id,
+            privatePayJobId: requirements.request_id,
+            logger: (entry) => console.info(JSON.stringify({ ...entry, event: "privatepay_quest_completion" })),
+          });
+          console.info(JSON.stringify({ event: "privatepay_quest_completed", wallet: x402Input.payer, quest_id: 111, result: questResult }));
+        }
+      } catch (questError) {
+        // Log but don't block payment on quest completion failure
+        console.warn(JSON.stringify({ event: "privatepay_quest_completion_failed", wallet: x402Input.payer, error: String(questError.message).slice(0, 200) }));
+        questResult = { attempted: true, failed: true, error: String(questError.message) };
+      }
+    }
     const paymentResponse = {
       success: true,
       transaction: `privatepay:${digest({ request_id: requirements.request_id, settlement: settlement.transaction || null }).slice(0, 32)}`,
       network: requirements.requirements.accepts[0].network,
-      extensions: { privacy_boundary: "provider_audit_only", request_id: requirements.request_id, onchain_verification: onchainVerification.status, pdao_fee: pdaoFee, ...(autopilot ? { autopilot_operation_id: x402Input.autopilot_operation_id } : {}) },
+      extensions: { privacy_boundary: "provider_audit_only", request_id: requirements.request_id, onchain_verification: onchainVerification.status, pdao_fee: pdaoFee, quest_completion: questResult.attempted ? questResult : undefined, ...(autopilot ? { autopilot_operation_id: x402Input.autopilot_operation_id } : {}) },
     };
-    const paidBinding = { ...checkoutBinding, payment_id: signedPaymentId || null, state: "paid", paid_at: now(), payment_response: paymentResponse, settlement_transaction: settlement.transaction || null, updated_at: now() };
+    const paidBinding = { ...checkoutBinding, payment_id: signedPaymentId || null, state: "paid", paid_at: now(), payment_response: paymentResponse, settlement_transaction: settlement.transaction || null, quest_result: questResult, updated_at: now() };
     await checkoutStore.put("Payments", requestKey, paidBinding);
     if (signedPaymentId) await checkoutStore.put("Payments", `privatepay_checkout_${signedPaymentId}`, paidBinding);
     return json({ status: "paid", request_id: requirements.request_id, payment_response: paymentResponse, pdao_fee: pdaoFee, provider_visibility: "authenticated_provider_only" }, 200, { "PAYMENT-RESPONSE": encodePaymentResponseHeader(paymentResponse) });
