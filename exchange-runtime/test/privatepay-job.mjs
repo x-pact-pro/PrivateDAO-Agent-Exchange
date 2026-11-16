@@ -82,6 +82,42 @@ test("PrivatePAY wallet balance lookup is read-only and rejects invalid wallets"
   assert.match(response.body, /valid Solana wallet|invalid Solana wallet/i);
 });
 
+test("PrivatePAY balance preflight rejects an unfunded payer before provider checkout", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalPreflight = process.env.PRIVATEPAY_BALANCE_PREFLIGHT;
+  let providerCheckoutCalls = 0;
+  process.env.PRIVATEPAY_BALANCE_PREFLIGHT = "true";
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    const payload = JSON.parse(init.body || "{}");
+    if (payload.method === "getBalance")
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: 0 } }), { status: 200, headers: { "content-type": "application/json" } });
+    if (payload.method === "getTokenAccountsByOwner")
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { value: [] } }), { status: 200, headers: { "content-type": "application/json" } });
+    if (target.endsWith("/v1/payments")) {
+      providerCheckoutCalls += 1;
+      throw new Error("provider checkout must not be reached for an unfunded payer");
+    }
+    throw new Error(`unexpected fixture request: ${target}`);
+  };
+  try {
+    resetForTests();
+    const response = await request("/api/privatepay/x402", "POST", {
+      payer: "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6",
+      resource: "https://agents.example/api/unfunded",
+      provider_id: "provider-1",
+      amount_base_units: "1000",
+    });
+    assert.equal(response.statusCode, 402);
+    assert.equal(JSON.parse(response.body).code, "PRIVATEPAY_PAYER_USDC_INSUFFICIENT");
+    assert.equal(providerCheckoutCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalPreflight === undefined) delete process.env.PRIVATEPAY_BALANCE_PREFLIGHT;
+    else process.env.PRIVATEPAY_BALANCE_PREFLIGHT = originalPreflight;
+  }
+});
+
 test("PrivatePAY job lifecycle verifies, settles, executes once, and redacts public payment data", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

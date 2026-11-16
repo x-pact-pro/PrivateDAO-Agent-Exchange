@@ -12,6 +12,7 @@
     "test": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node --test --test-concurrency=1 test/*.mjs",
     "smoke": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node test/smoke.mjs",
     "verify:live-surface": "node scripts/verify-live-surface.mjs",
+    "verify:deployment-workflow": "node scripts/verify-deployment-workflow.mjs",
     "verify:kernel-boundary": "node scripts/verify-kernel-boundary.mjs",
     "privatepay:audit": "node scripts/privatepay-conformance.mjs",
     "privatepay:delegation-audit": "node scripts/privatepay-delegation-audit.mjs",

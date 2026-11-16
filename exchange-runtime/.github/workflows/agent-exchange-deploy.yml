@@ -288,11 +288,27 @@ jobs:
           test -n "$API_ID" && test "$API_ID" != "None"
 
           FUNCTION_ARN="$(aws lambda get-function \
-            --function-name "$FUNCTION_NAME" \
+            --function-name "$FUNCTION_NAME:$DEPLOYED_VERSION" \
             --region "$AWS_REGION" \
             --query 'Configuration.FunctionArn' \
             --output text)"
           INTEGRATION_URI="arn:aws:apigateway:${AWS_REGION}:lambda:path/2015-03-31/functions/${FUNCTION_ARN}/invocations"
+
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          API_SOURCE_ARN="arn:aws:execute-api:${AWS_REGION}:${ACCOUNT_ID}:${API_ID}/*/*/*"
+          STATEMENT_ID="agent-exchange-api-${DEPLOYED_VERSION}"
+          if ! aws lambda add-permission \
+            --function-name "$FUNCTION_NAME" \
+            --qualifier "$DEPLOYED_VERSION" \
+            --statement-id "$STATEMENT_ID" \
+            --action lambda:InvokeFunction \
+            --principal apigateway.amazonaws.com \
+            --source-arn "$API_SOURCE_ARN" >/dev/null 2>&1; then
+            aws lambda get-policy \
+              --function-name "$FUNCTION_NAME" \
+              --qualifier "$DEPLOYED_VERSION" \
+              | jq -e --arg sid "$STATEMENT_ID" '.Policy | fromjson | .Statement | any(.Sid == $sid)' >/dev/null
+          fi
 
           for INTEGRATION_ID in $(aws apigatewayv2 get-integrations \
             --api-id "$API_ID" \
@@ -308,7 +324,7 @@ jobs:
               --timeout-in-millis 30000 >/dev/null
           done
 
-          echo "API Gateway $API_ID routed to unqualified Lambda $FUNCTION_NAME"
+          echo "API Gateway $API_ID routed to immutable Lambda version $DEPLOYED_VERSION"
 
       - name: Reconcile API Gateway CORS for browser checkout
         id: cors
@@ -489,6 +505,35 @@ jobs:
             echo "::error::Rollback CodeSha256 mismatch."
             exit 1
           fi
+
+          DOMAIN="${PUBLIC_BASE_URL#https://}"
+          DOMAIN="${DOMAIN%%/*}"
+          API_ID="$(aws apigatewayv2 get-api-mappings \
+            --domain-name "$DOMAIN" \
+            --region "$AWS_REGION" \
+            --query 'Items[0].ApiId' \
+            --output text)"
+          test -n "$API_ID" && test "$API_ID" != "None"
+          RESTORED_FUNCTION_ARN="$(aws lambda get-function \
+            --function-name "$FUNCTION_NAME" \
+            --region "$AWS_REGION" \
+            --query 'Configuration.FunctionArn' \
+            --output text)"
+          RESTORED_INTEGRATION_URI="arn:aws:apigateway:${AWS_REGION}:lambda:path/2015-03-31/functions/${RESTORED_FUNCTION_ARN}/invocations"
+          for INTEGRATION_ID in $(aws apigatewayv2 get-integrations \
+            --api-id "$API_ID" \
+            --region "$AWS_REGION" \
+            --query 'Items[].IntegrationId' \
+            --output text); do
+            aws apigatewayv2 update-integration \
+              --api-id "$API_ID" \
+              --integration-id "$INTEGRATION_ID" \
+              --region "$AWS_REGION" \
+              --integration-uri "$RESTORED_INTEGRATION_URI" \
+              --payload-format-version 2.0 \
+              --timeout-in-millis 30000 >/dev/null
+          done
+          echo "API Gateway routing restored to the rollback Lambda package."
 
           for attempt in $(seq 1 12); do
             if curl --fail --silent --show-error               --connect-timeout 10 --max-time 30               "$PUBLIC_BASE_URL/api/health" >/tmp/rollback-health.json &&
