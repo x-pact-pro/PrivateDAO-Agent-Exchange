@@ -49,6 +49,7 @@ import { handleAlibabaSpi } from "./alibaba-marketplace.mjs";
 import { encodePaymentResponseHeader } from "@x402/core/http";
 import { createQuestlineClient, participationMessage, validateAndPushQuest, assertSolanaWallet, verifyWalletSignature } from "./questline.mjs";
 import { commercePricingForExistingQuote } from "./commerce-pricing.mjs";
+import { validateMagicBlockDelegationState, setupPrivateEphemeralPermission, ensureUsdcTransferQueueReady, runMagicBlockP0Validations } from "./privatepay-magicblock-validation.mjs";
 
 const config = getConfig();
 const privatePayReadiness = () => process.env.AGENT_EXCHANGE_TEST_MODE === "true"
@@ -5812,11 +5813,27 @@ async function handle(e) {
       // This prevents users from being charged 0.05 USDC if MagicBlock will reject their delegation
       if (requirements.pdao.selected === true) {
         try {
-          // Attempt to verify the payer has a valid MagicBlock delegation
-          // This is a non-blocking probe - if it fails we log but don't block
-          const probeMagicBlockDelegation = async () => {
-            const teeUrl = DEFAULT_PRIVATEPAY_TEE_RPC;
-            const delegationCheckUrl = `${teeUrl}/validator/MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo/private-balance?wallet=${encodeURIComponent(checkoutBinding.payer)}`;
+           // Attempt to verify the payer has a valid MagicBlock delegation
+           // This is a non-blocking probe - if it fails we log but don't block
+           const probeMagicBlockDelegation = async () => {
+             const teeUrl = DEFAULT_PRIVATEPAY_TEE_RPC;
+             // FIX: Dynamic validator discovery instead of hardcoded validator
+             // First, get current MagicBlock facilitator routing
+             let activeValidator = "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo"; // fallback
+             try {
+               const routerUrl = `${teeUrl}/router/active`;
+               const routerResp = await fetch(routerUrl, { signal: AbortSignal.timeout(1000) });
+               if (routerResp.ok) {
+                 const routerData = await routerResp.json();
+                 if (routerData.validator_id) {
+                   activeValidator = routerData.validator_id;
+                 }
+               }
+             } catch (routerErr) {
+               // Router check failed, use fallback validator
+               console.warn(`Router discovery failed: ${routerErr.message}, using fallback validator`);
+             }
+             const delegationCheckUrl = `${teeUrl}/validator/${activeValidator}/private-balance?wallet=${encodeURIComponent(checkoutBinding.payer)}`;
             try {
               const resp = await fetch(delegationCheckUrl, { signal: AbortSignal.timeout(3000) });
               if (!resp.ok && resp.status !== 404) {

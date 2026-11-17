@@ -4,6 +4,7 @@ import { parsePaymentPayload, parsePaymentRequirements } from "@x402/core/schema
 import { PublicKey, Transaction, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
 import { assertPrivatePayNetworkAdapter, privatePayNetworkMatrix } from "./privatepay-networks.mjs";
 import { DEFAULT_PRIVATEPAY_TEE_RPC, findPrivatePaySettlement, getPrivatePaySignatureStatus, isSolanaTransactionSignature, verifyPrivatePayPaymentBoundQuote } from "./privatepay-mainnet.mjs";
+import { validateMagicBlockDelegationState, setupPrivateEphemeralPermission, ensureUsdcTransferQueueReady, runMagicBlockP0Validations } from "./privatepay-magicblock-validation.mjs";
 import { privatePayAutopilotStatus } from "./privatepay-autopilot.mjs";
 import { readPdaoBalance, readPdaoPrice } from "./pdao-entitlement.mjs";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createBurnCheckedInstruction, createTransferCheckedInstruction, getAssociatedTokenAddressSync } from "./spl-token.mjs";
@@ -622,6 +623,25 @@ export async function createPrivatePayCheckout(config, input = {}, fetchImpl = f
   if (!Number.isFinite(expiresInSeconds))
     throw Object.assign(new Error("expires_in_seconds must be a finite number"), { statusCode: 400, code: "PRIVATEPAY_INVALID_EXPIRY" });
   const amount = amountBaseUnits(input);
+  
+  // P0 GATE (FATAL): Validate MagicBlock delegation, permission, and transfer queue readiness
+  // This gate must pass before any network request to MagicBlock.
+  try {
+    const p0Result = await runMagicBlockP0Validations(
+      config,
+      payer,
+      config.privatePayValidatorAddress || config.magicBlockTeePubkey,
+      DEFAULT_PRIVATEPAY_TEE_RPC,
+      config.privatePayFacilitatorApiKey
+    );
+    // All gates passed; proceed with checkout
+  } catch (err) {
+    throw Object.assign(
+      new Error(`MagicBlock P0 validation failed: ${err.message}`),
+      { statusCode: 503, code: "PRIVATEPAY_MAGICBLOCK_P0_GATE_FAILED", cause: err }
+    );
+  }
+  
   const body = {
     amount,
     cluster: MAGICBLOCK_PRIVATE_CLUSTER,
