@@ -296,43 +296,153 @@ export async function runMagicBlockP0Validations(config, payer, validator, teeUr
     transfer_queue_ready: false,
     details: {}
   };
+  
+  const startTime = Date.now();
+  const traceId = Math.random().toString(36).substring(7);
 
   try {
     // P0.1: Validate delegation state
-    console.log('[PrivatePAY] P0.1: Validating MagicBlock delegation state...');
+    const p01Start = Date.now();
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'privatepay',
+      gate: 'P0.1',
+      action: 'start_delegation_validation',
+      traceId,
+      payer: payer.substring(0, 8),
+      validator: validator.substring(0, 8)
+    }));
+    
     const delegationState = await validateMagicBlockDelegationState(teeUrl, payer, validator);
     results.delegation_valid = true;
     results.details.delegation = delegationState;
-    console.log('[PrivatePAY] P0.1: Delegation valid', delegationState);
+    
+    const p01Elapsed = Date.now() - p01Start;
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'privatepay',
+      gate: 'P0.1',
+      action: 'delegation_validation_success',
+      traceId,
+      elapsed_ms: p01Elapsed,
+      delegation_reference: delegationState.delegation_reference?.substring(0, 8)
+    }));
   } catch (err) {
-    console.error('[PrivatePAY] P0.1: Delegation validation failed', err.message);
+    const p01Elapsed = Date.now() - startTime;
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      service: 'privatepay',
+      gate: 'P0.1',
+      action: 'delegation_validation_failed',
+      traceId,
+      error_code: err.code || 'UNKNOWN',
+      error_message: err.message,
+      elapsed_ms: p01Elapsed
+    }));
     throw err; // P0.1 is fatal
   }
 
   try {
     // P0.2: Create PER ephemeral permission
-    console.log('[PrivatePAY] P0.2: Creating PER ephemeral permission...');
+    const p02Start = Date.now();
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'privatepay',
+      gate: 'P0.2',
+      action: 'start_permission_creation',
+      traceId
+    }));
+    
     const expiryUnix = Math.floor(Date.now() / 1000) + 1800; // 30 min from now
     const permission = await setupPrivateEphemeralPermission(teeUrl, payer, expiryUnix, { authToken });
     results.permission_created = true;
     results.details.permission = permission;
-    console.log('[PrivatePAY] P0.2: Permission created', permission.permission_address);
+    
+    const p02Elapsed = Date.now() - p02Start;
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'privatepay',
+      gate: 'P0.2',
+      action: 'permission_creation_success',
+      traceId,
+      elapsed_ms: p02Elapsed,
+      permission_address: permission.permission_address?.substring(0, 8)
+    }));
   } catch (err) {
-    console.error('[PrivatePAY] P0.2: Permission creation failed', err.message);
+    const p02Elapsed = Date.now() - startTime;
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      service: 'privatepay',
+      gate: 'P0.2',
+      action: 'permission_creation_failed',
+      traceId,
+      error_code: err.code || 'UNKNOWN',
+      error_message: err.message,
+      elapsed_ms: p02Elapsed
+    }));
     throw err; // P0.2 is fatal
   }
 
   try {
     // P0.3: Ensure USDC transfer queue ready
-    console.log('[PrivatePAY] P0.3: Checking USDC transfer queue...');
+    const p03Start = Date.now();
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'privatepay',
+      gate: 'P0.3',
+      action: 'start_transfer_queue_check',
+      traceId
+    }));
+    
     const queueStatus = await ensureUsdcTransferQueueReady(teeUrl, validator, config);
     results.transfer_queue_ready = true;
     results.details.transfer_queue = queueStatus;
-    console.log('[PrivatePAY] P0.3: Transfer queue ready', queueStatus);
+    
+    const p03Elapsed = Date.now() - p03Start;
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'INFO',
+      service: 'privatepay',
+      gate: 'P0.3',
+      action: 'transfer_queue_check_success',
+      traceId,
+      elapsed_ms: p03Elapsed,
+      transfer_queue: queueStatus.transfer_queue?.substring(0, 8),
+      already_initialized: queueStatus.already_initialized
+    }));
   } catch (err) {
-    console.error('[PrivatePAY] P0.3: Transfer queue check failed', err.message);
+    const p03Elapsed = Date.now() - startTime;
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'ERROR',
+      service: 'privatepay',
+      gate: 'P0.3',
+      action: 'transfer_queue_check_failed',
+      traceId,
+      error_code: err.code || 'UNKNOWN',
+      error_message: err.message,
+      elapsed_ms: p03Elapsed
+    }));
     throw err; // P0.3 is fatal
   }
+
+  const totalElapsed = Date.now() - startTime;
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level: 'INFO',
+    service: 'privatepay',
+    action: 'all_p0_gates_passed',
+    traceId,
+    total_elapsed_ms: totalElapsed,
+    p0_gates_passed: 3
+  }));
 
   return results;
 }
