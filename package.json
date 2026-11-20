@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=26"
   },
   "scripts": {
     "test:surfaces": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node --test test/surfaces.mjs",

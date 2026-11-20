@@ -11,9 +11,10 @@ import { readRpc } from "./solana.mjs";
 
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
 
-const dynamoDbClient = new DynamoDBClient({ region: "eu-north-1" });
+const dynamoDbClient = new DynamoDBClient({});
 
 async function getQuoteFromDynamoDB(quoteId) {
+  if (!process.env.AGENT_EXCHANGE_QUOTES_TABLE) return undefined;
   const command = new GetItemCommand({
     TableName: process.env.AGENT_EXCHANGE_QUOTES_TABLE,
     Key: { quoteId: { S: quoteId } },
@@ -23,12 +24,15 @@ async function getQuoteFromDynamoDB(quoteId) {
 }
 
 async function storeQuoteInDynamoDB(quote) {
+  const tableName = process.env.AGENT_EXCHANGE_QUOTES_TABLE;
+  if (!tableName) return;
+  const paymentId = String(quote?.payment_id || quote?.id || "").trim();
+  if (!PRIVATEPAY_ID.test(paymentId)) return;
   const command = new PutItemCommand({
-    TableName: process.env.AGENT_EXCHANGE_QUOTES_TABLE,
+    TableName: tableName,
     Item: {
-      quoteId: { S: quote.id },
-      walletAddress: { S: quote.walletAddress },
-      createdAt: { S: new Date(quote.createdAt).toISOString() },
+      quoteId: { S: paymentId },
+      createdAt: { S: new Date().toISOString() },
     },
   });
   await dynamoDbClient.send(command);
@@ -398,21 +402,29 @@ export async function preparePrivatePayTransfer(config, input = {}, fetchImpl = 
     maxDelayMs: String(maxDelayMs),
     gasless: input.gasless === true,
   };
-  const response = await fetchImpl(privatePayProviderUrl(config, "/v1/spl/transfer"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(8000),
+  let response;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await fetchImpl(privatePayProviderUrl(config, "/v1/spl/transfer"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
       });
-      break;
+      if (response.ok || attempt === 2) break;
     } catch (err) {
       lastError = err;
-      if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt === 2) break;
     }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
   if (!response) {
-    // Fallback to on-chain balance
-    return { balance: await readOnChainBalance(config), source: "on-chain_fallback" };
+    throw Object.assign(new Error("PrivatePAY provider is unavailable after retries"), {
+      statusCode: 503,
+      code: "PRIVATEPAY_PROVIDER_UNAVAILABLE",
+      cause: lastError,
+    });
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok)
@@ -456,21 +468,29 @@ function assertPrivatePayBuilderInput(config, input = {}) {
 }
 
 async function preparePrivatePayBaseTransaction(config, kind, path, body, requestId, fetchImpl) {
-  const response = await fetchImpl(privatePayProviderUrl(config, path), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(8000),
+  let response;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await fetchImpl(privatePayProviderUrl(config, path), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
       });
-      break;
+      if (response.ok || attempt === 2) break;
     } catch (err) {
       lastError = err;
-      if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt === 2) break;
     }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
   if (!response) {
-    // Fallback to on-chain balance
-    return { balance: await readOnChainBalance(config), source: "on-chain_fallback" };
+    throw Object.assign(new Error(`PrivatePAY ${kind} provider is unavailable after retries`), {
+      statusCode: 503,
+      code: "PRIVATEPAY_PROVIDER_UNAVAILABLE",
+      cause: lastError,
+    });
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok)
@@ -832,27 +852,31 @@ export async function createPrivatePayCheckout(config, input = {}, fetchImpl = f
     payer,
     externalReference,
   };
-  const response = await fetchImpl(privatePayProviderUrl(config, "/v1/payments"), {
-    method: "POST",
-    headers: merchantHeaders(config),
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(8000),
+  let response;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await fetchImpl(privatePayProviderUrl(config, "/v1/payments"), {
+        method: "POST",
+        headers: merchantHeaders(config),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
       });
-      break;
+      if (response.ok || attempt === 2) break;
     } catch (err) {
       lastError = err;
-      if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt === 2) break;
     }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
   if (!response) {
-    // Fallback to on-chain balance
-    return { balance: await readOnChainBalance(config), source: "on-chain_fallback" };
+    throw Object.assign(new Error("MagicBlock checkout provider is unavailable after retries"), {
+      statusCode: 503,
+      code: "PRIVATEPAY_PROVIDER_UNAVAILABLE",
+      cause: lastError,
+    });
   }
   const payload = await response.json().catch(() => ({}));
-  if (response.status === 202)
-    const quote = checkoutResponseBody(payload, response.status);
-  await storeQuoteInDynamoDB(quote);
-  return quote;
   if (!response.ok)
     throw providerRejectedError("MagicBlock rejected checkout creation", "PRIVATEPAY_CHECKOUT_REJECTED", response, payload);
   const quote = checkoutResponseBody(payload, response.status);
@@ -908,21 +932,29 @@ export async function createPrivatePayPaymentLinkCheckout(config, input = {}, fe
   if (!UUID_V4.test(idempotencyKey))
     throw Object.assign(new Error("idempotency_key must be a UUIDv4"), { statusCode: 400, code: "PRIVATEPAY_INVALID_IDEMPOTENCY_KEY" });
   const headers = { ...merchantHeaders(config), "idempotency-key": idempotencyKey, "X-Merchant-Id": merchantId };
-  const response = await fetchImpl(privatePayProviderUrl(config, `/v1/payment-links/${encodeURIComponent(merchantId)}/${encodeURIComponent(linkId)}/checkouts`), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ payer }),
-    signal: AbortSignal.timeout(8000),
+  let response;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await fetchImpl(privatePayProviderUrl(config, `/v1/payment-links/${encodeURIComponent(merchantId)}/${encodeURIComponent(linkId)}/checkouts`), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ payer }),
+        signal: AbortSignal.timeout(8000),
       });
-      break;
+      if (response.ok || attempt === 2) break;
     } catch (err) {
       lastError = err;
-      if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt === 2) break;
     }
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
   if (!response) {
-    // Fallback to on-chain balance
-    return { balance: await readOnChainBalance(config), source: "on-chain_fallback" };
+    throw Object.assign(new Error("MagicBlock payment-link provider is unavailable after retries"), {
+      statusCode: 503,
+      code: "PRIVATEPAY_PROVIDER_UNAVAILABLE",
+      cause: lastError,
+    });
   }
   const payload = await response.json().catch(() => ({}));
   if (![200, 202].includes(response.status))

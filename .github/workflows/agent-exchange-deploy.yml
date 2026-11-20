@@ -166,7 +166,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "22.21.1"
+          node-version: "26.x"
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -203,7 +203,7 @@ jobs:
           set -euo pipefail
           aws sts get-caller-identity >/dev/null
           runtime="$(aws lambda get-function-configuration             --function-name "$FUNCTION_NAME"             --query 'Runtime'             --output text)"
-          test "$runtime" = "nodejs22.x"
+          test "$runtime" = "nodejs26.x"
           echo "Target function: $FUNCTION_NAME"
           echo "Region: $AWS_REGION"
           echo "Runtime: $runtime"
