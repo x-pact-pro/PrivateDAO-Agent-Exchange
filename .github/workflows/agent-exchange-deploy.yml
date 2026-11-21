@@ -300,6 +300,19 @@ jobs:
 
           ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
           API_SOURCE_ARN="arn:aws:execute-api:${AWS_REGION}:${ACCOUNT_ID}:${API_ID}/*/*/*"
+          UNQUALIFIED_STATEMENT_ID="agent-exchange-api-unqualified-rollback"
+          if ! PERMISSION_ERROR="$(aws lambda add-permission \
+            --function-name "$FUNCTION_NAME" \
+            --statement-id "$UNQUALIFIED_STATEMENT_ID" \
+            --action lambda:InvokeFunction \
+            --principal apigateway.amazonaws.com \
+            --source-arn "$API_SOURCE_ARN" 2>&1)"; then
+            if ! printf '%s\n' "$PERMISSION_ERROR" | grep -q 'ResourceConflictException'; then
+              printf '%s\n' "$PERMISSION_ERROR" >&2
+              exit 1
+            fi
+          fi
+
           STATEMENT_ID="agent-exchange-api-${DEPLOYED_VERSION}"
           if ! PERMISSION_ERROR="$(aws lambda add-permission \
             --function-name "$FUNCTION_NAME" \
@@ -330,9 +343,37 @@ jobs:
 
           echo "API Gateway $API_ID routed to immutable Lambda version $DEPLOYED_VERSION"
 
+      - name: Reconcile API Gateway route authorization
+        id: route_auth
+        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+
+          DOMAIN="${PUBLIC_BASE_URL#https://}"
+          DOMAIN="${DOMAIN%%/*}"
+          API_ID="$(aws apigatewayv2 get-api-mappings \
+            --domain-name "$DOMAIN" \
+            --region "$AWS_REGION" \
+            --query 'Items[0].ApiId' \
+            --output text)"
+          test -n "$API_ID" && test "$API_ID" != "None"
+
+          routes="$(aws apigatewayv2 get-routes --api-id "$API_ID" --region "$AWS_REGION" --output json)"
+          while IFS= read -r route_id; do
+            test -n "$route_id" || continue
+            aws apigatewayv2 update-route \
+              --api-id "$API_ID" \
+              --route-id "$route_id" \
+              --authorization-type NONE \
+              --region "$AWS_REGION" >/dev/null
+          done < <(jq -r '.Items[] | select(.AuthorizationType != "NONE") | .RouteId' <<< "$routes")
+
+          echo "API Gateway routes are public at the transport layer; application routes enforce authorization."
+
       - name: Reconcile API Gateway CORS for browser checkout
         id: cors
-        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
+        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success' && steps.route_auth.outcome == 'success'
         run: |
           set -euo pipefail
 
@@ -375,7 +416,8 @@ jobs:
         id: smoke
         if: >-
           steps.deploy_code.outcome == 'success' &&
-          steps.route_api.outcome == 'success'
+          steps.route_api.outcome == 'success' &&
+          steps.route_auth.outcome == 'success'
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -407,7 +449,7 @@ jobs:
           jq -e '.seller_tiers.free.listing_fee_usd == 0 and (.seller_tiers | has("basic") and has("pro"))' /tmp/marketplace-policy.json >/dev/null
 
           preflight_headers="$(curl --fail --silent --show-error --dump-header - --output /dev/null \
-            -X OPTIONS "$SMOKE_BASE_URL/api/privatepay/x402" \
+            -X OPTIONS "$SMOKE_BASE_URL/api/privatepay/x402/requirements" \
             -H 'Origin: https://privatedao.org' \
             -H 'Access-Control-Request-Method: POST' \
             -H 'Access-Control-Request-Headers: content-type,payment-signature')"
@@ -417,15 +459,15 @@ jobs:
 
           privatepay_status="$(curl -q --silent --show-error --dump-header /tmp/privatepay-headers \
             --output /tmp/privatepay-response --write-out '%{http_code}' \
-            -X POST "$SMOKE_BASE_URL/api/privatepay/x402" \
+            -X POST "$SMOKE_BASE_URL/api/privatepay/x402/requirements" \
             -H 'Origin: https://privatedao.org' \
             -H 'Content-Type: application/json' \
-            --data '{"payer":"11111111111111111111111111111111","resource":"https://agents.privatedao.org/services/privatepay-x402","provider_id":"privatepay.x402","amount_base_units":"500000"}')"
-          test "$privatepay_status" = "402"
-          grep -Eiq '^payment-required:' /tmp/privatepay-headers
+            --data '{"resource":"https://agents.privatedao.org/services/privatepay-x402","provider_id":"privatepay.x402","amount_base_units":"500000"}')"
+          test "$privatepay_status" = "200"
+          jq -e '.requirements.x402Version == 2 and .requirements.accepts[0].scheme == "exact-magicblock" and .requirements.accepts[0].network == "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" and .requirements.accepts[0].asset == "EPjFWdd5AufSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" and .requirements.accepts[0].amount == "500000" and .pdao.required == false' /tmp/privatepay-response >/dev/null
           grep -Eiq '^access-control-expose-headers:.*payment-required' /tmp/privatepay-headers
 
-          echo "Production smoke gate passed, including MongoDB accounts, seller-tier policy, and browser x402 CORS."
+          echo "Production smoke gate passed, including MongoDB accounts, seller-tier policy, canonical PrivatePAY requirements, and browser CORS."
 
       - name: Reconcile payout runtime configuration
         id: payout_runtime
@@ -446,7 +488,7 @@ jobs:
 
       - name: Verify live Agent Exchange contract
         id: live_surface
-        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
+        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success' && steps.route_auth.outcome == 'success'
         continue-on-error: true
         env:
           AGENT_EXCHANGE_PUBLIC_BASE_URL: ${{ env.SMOKE_BASE_URL }}
@@ -489,6 +531,7 @@ jobs:
           (
             steps.deploy_code.outcome == 'failure' ||
             steps.route_api.outcome == 'failure' ||
+            steps.route_auth.outcome == 'failure' ||
             steps.cors.outcome == 'failure' ||
             steps.smoke.outcome == 'failure' ||
             steps.payout_runtime.outcome == 'failure' ||
@@ -568,6 +611,7 @@ jobs:
           (
             steps.deploy_code.outcome == 'failure' ||
             steps.route_api.outcome == 'failure' ||
+            steps.route_auth.outcome == 'failure' ||
             steps.cors.outcome == 'failure' ||
             steps.smoke.outcome == 'failure' ||
             steps.payout_runtime.outcome == 'failure' ||
@@ -586,6 +630,7 @@ jobs:
         if: >-
           steps.deploy_code.outcome == 'success' &&
           steps.route_api.outcome == 'success' &&
+          steps.route_auth.outcome == 'success' &&
           steps.cors.outcome == 'success' &&
           steps.smoke.outcome == 'success' &&
           steps.payout_runtime.outcome == 'success' &&
