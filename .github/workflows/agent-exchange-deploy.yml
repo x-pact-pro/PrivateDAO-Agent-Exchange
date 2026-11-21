@@ -26,6 +26,7 @@ env:
   AWS_REGION: ${{ vars.AGENT_EXCHANGE_AWS_REGION }}
   FUNCTION_NAME: ${{ vars.AGENT_EXCHANGE_FUNCTION_NAME }}
   PUBLIC_BASE_URL: ${{ vars.AGENT_EXCHANGE_PUBLIC_BASE_URL }}
+  SMOKE_BASE_URL: ${{ vars.AGENT_EXCHANGE_SMOKE_BASE_URL || vars.AGENT_EXCHANGE_PUBLIC_BASE_URL }}
 
 jobs:
   gate:
@@ -63,6 +64,7 @@ jobs:
           test -n "$AWS_REGION" || { echo "::error::AGENT_EXCHANGE_AWS_REGION is not configured."; exit 1; }
           test -n "$FUNCTION_NAME" || { echo "::error::AGENT_EXCHANGE_FUNCTION_NAME is not configured."; exit 1; }
           test -n "$PUBLIC_BASE_URL" || { echo "::error::AGENT_EXCHANGE_PUBLIC_BASE_URL is not configured."; exit 1; }
+          test -n "$SMOKE_BASE_URL" || { echo "::error::AGENT_EXCHANGE_SMOKE_BASE_URL is not configured."; exit 1; }
 
       - name: Require explicit production approval for deployment
         if: github.event_name == 'workflow_dispatch'
@@ -391,12 +393,12 @@ jobs:
             return 1
           }
 
-          retry_json "$PUBLIC_BASE_URL/api/health" /tmp/health.json
-          retry_json "$PUBLIC_BASE_URL/api/services" /tmp/services.json
-          retry_json "$PUBLIC_BASE_URL/.well-known/agent-card.json" /tmp/agent-card.json
-          retry_json "$PUBLIC_BASE_URL/openapi.json" /tmp/openapi.json
-          retry_json "$PUBLIC_BASE_URL/api/providers/status" /tmp/providers.json
-          retry_json "$PUBLIC_BASE_URL/api/marketplace/policy" /tmp/marketplace-policy.json
+          retry_json "$SMOKE_BASE_URL/api/health" /tmp/health.json
+          retry_json "$SMOKE_BASE_URL/api/services" /tmp/services.json
+          retry_json "$SMOKE_BASE_URL/.well-known/agent-card.json" /tmp/agent-card.json
+          retry_json "$SMOKE_BASE_URL/openapi.json" /tmp/openapi.json
+          retry_json "$SMOKE_BASE_URL/api/providers/status" /tmp/providers.json
+          retry_json "$SMOKE_BASE_URL/api/marketplace/policy" /tmp/marketplace-policy.json
 
           jq -e '.services | type == "array" and length >= 24' /tmp/services.json >/dev/null
           jq -e '[.services[].id] | index("verify.basic") != null' /tmp/services.json >/dev/null
@@ -405,7 +407,7 @@ jobs:
           jq -e '.seller_tiers.free.listing_fee_usd == 0 and (.seller_tiers | has("basic") and has("pro"))' /tmp/marketplace-policy.json >/dev/null
 
           preflight_headers="$(curl --fail --silent --show-error --dump-header - --output /dev/null \
-            -X OPTIONS "$PUBLIC_BASE_URL/api/privatepay/x402" \
+            -X OPTIONS "$SMOKE_BASE_URL/api/privatepay/x402" \
             -H 'Origin: https://privatedao.org' \
             -H 'Access-Control-Request-Method: POST' \
             -H 'Access-Control-Request-Headers: content-type,payment-signature')"
@@ -415,7 +417,7 @@ jobs:
 
           curl --silent --show-error --dump-header /tmp/privatepay-headers \
             --output /tmp/privatepay-response \
-            -X POST "$PUBLIC_BASE_URL/api/privatepay/x402" \
+            -X POST "$SMOKE_BASE_URL/api/privatepay/x402" \
             -H 'Origin: https://privatedao.org' \
             -H 'Content-Type: application/json' \
             --data '{"payer":"11111111111111111111111111111111","resource":"api://smoke","provider_id":"smoke","amount_base_units":"1"}'
@@ -445,7 +447,7 @@ jobs:
         if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
         continue-on-error: true
         env:
-          AGENT_EXCHANGE_PUBLIC_BASE_URL: ${{ env.PUBLIC_BASE_URL }}
+          AGENT_EXCHANGE_PUBLIC_BASE_URL: ${{ env.SMOKE_BASE_URL }}
         run: |
           set -euo pipefail
           npm run verify:live-surface
@@ -540,7 +542,7 @@ jobs:
           echo "API Gateway routing restored to the rollback Lambda package."
 
           for attempt in $(seq 1 12); do
-            if curl --fail --silent --show-error               --connect-timeout 10 --max-time 30               "$PUBLIC_BASE_URL/api/health" >/tmp/rollback-health.json &&
+            if curl --fail --silent --show-error               --connect-timeout 10 --max-time 30               "$SMOKE_BASE_URL/api/health" >/tmp/rollback-health.json &&
               jq -e 'type == "object"' /tmp/rollback-health.json >/dev/null; then
               echo "Rollback health check passed."
               break
