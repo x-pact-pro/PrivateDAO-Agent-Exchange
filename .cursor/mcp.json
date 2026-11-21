@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "awsknowledge": {
+      "url": "https://knowledge-mcp.global.api.aws"
+    }
+  }
+}
