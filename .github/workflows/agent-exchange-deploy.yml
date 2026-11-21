@@ -415,12 +415,14 @@ jobs:
           grep -Eiq '^access-control-allow-methods:.*POST' <<< "$preflight_headers"
           grep -Eiq '^access-control-allow-headers:.*payment-signature' <<< "$preflight_headers"
 
-          curl --silent --show-error --dump-header /tmp/privatepay-headers \
-            --output /tmp/privatepay-response \
+          privatepay_status="$(curl -q --silent --show-error --dump-header /tmp/privatepay-headers \
+            --output /tmp/privatepay-response --write-out '%{http_code}' \
             -X POST "$SMOKE_BASE_URL/api/privatepay/x402" \
             -H 'Origin: https://privatedao.org' \
             -H 'Content-Type: application/json' \
-            --data '{"payer":"11111111111111111111111111111111","resource":"api://smoke","provider_id":"smoke","amount_base_units":"1"}'
+            --data '{"payer":"11111111111111111111111111111111","resource":"https://agents.privatedao.org/services/privatepay-x402","provider_id":"privatepay.x402","amount_base_units":"500000"}')"
+          test "$privatepay_status" = "402"
+          grep -Eiq '^payment-required:' /tmp/privatepay-headers
           grep -Eiq '^access-control-expose-headers:.*payment-required' /tmp/privatepay-headers
 
           echo "Production smoke gate passed, including MongoDB accounts, seller-tier policy, and browser x402 CORS."
