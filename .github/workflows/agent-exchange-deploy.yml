@@ -464,7 +464,7 @@ jobs:
             -H 'Content-Type: application/json' \
             --data '{"resource":"https://agents.privatedao.org/services/privatepay-x402","provider_id":"privatepay.x402","amount_base_units":"500000"}')"
           test "$privatepay_status" = "200"
-          jq -e '.requirements.x402Version == 2 and .requirements.accepts[0].scheme == "exact-magicblock" and .requirements.accepts[0].network == "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" and .requirements.accepts[0].asset == "EPjFWdd5AufSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" and .requirements.accepts[0].amount == "500000" and .pdao.required == false' /tmp/privatepay-response >/dev/null
+          jq -e '.requirements.x402Version == 2 and .requirements.accepts[0].scheme == "exact-magicblock" and .requirements.accepts[0].network == "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" and .requirements.accepts[0].asset == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" and .requirements.accepts[0].amount == "500000" and .pdao.required == false' /tmp/privatepay-response >/dev/null
           grep -Eiq '^access-control-expose-headers:.*payment-required' /tmp/privatepay-headers
 
           echo "Production smoke gate passed, including MongoDB accounts, seller-tier policy, canonical PrivatePAY requirements, and browser CORS."
