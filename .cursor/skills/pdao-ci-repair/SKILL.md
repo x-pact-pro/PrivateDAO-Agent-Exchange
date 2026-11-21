@@ -11,7 +11,7 @@ work and respect ORCH's reservation of CI, package and lock files.
 2. Reproduce the failure using the committed lockfile and required runtime.
 3. Fix the underlying defect; keep meaningful checks and original deployment gates.
 4. Run the affected verification and applicable build.
-5. Give the diff and real results to `pdao-pr-verifier`.
+5. Give the diff and real results to the distinct-model REVIEW worker assigned by ORCH.
 6. Repair findings and repeat the affected checks.
 
 Wallet verification starts with `npm run typecheck`, `npm test` and

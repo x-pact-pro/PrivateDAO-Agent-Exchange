@@ -1,6 +1,6 @@
 ---
 name: pdao-pr-review
-description: Execute CUR-GH-03: independently review a PrivateDAO patch and reconcile its GitHub check evidence.
+description: "Execute CUR-GH-03: independently review a PrivateDAO patch and reconcile its GitHub check evidence."
 ---
 
 Record the exact repository, PR if one exists, base SHA and head SHA.

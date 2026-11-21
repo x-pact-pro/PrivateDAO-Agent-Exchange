@@ -1,6 +1,6 @@
 ---
 name: pdao-release-handoff
-description: Execute CUR-REL-01: prepare PrivateDAO build inputs and an evidence-based handoff for ORCH.
+description: "Execute CUR-REL-01: prepare PrivateDAO build inputs and an evidence-based handoff for ORCH."
 ---
 
 Support `REL-00` first: identify actual source-backed web origins,

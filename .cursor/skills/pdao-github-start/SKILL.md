@@ -12,13 +12,13 @@ Use native read operations:
 ```bash
 git status --short
 git rev-parse HEAD
-git remote get-url origin
 gh api user --jq '{login: .login}'
 gh repo view --json nameWithOwner,defaultBranchRef
 gh run list --limit 10 --json databaseId,name,headSha,status,conclusion,event
 ```
 
-Never print remote URLs containing credentials; sanitize or omit such a URL.
+Use the repository slug returned by `gh repo view`; do not print raw Git remote
+configuration or credential-bearing URLs.
 Inspect the actual `.github/workflows/` definitions and package scripts.
 Report each run against its actual SHA; old successful runs are historical.
 Map findings to `ENV-01`, `REL-00` or the assigned repair task.
