@@ -27,7 +27,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "26.x"
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -36,6 +36,9 @@ jobs:
 
       - name: Syntax and tests
         run: npm run lint && npm test && npm run smoke
+
+      - name: Verify production deployment workflow
+        run: npm run verify:deployment-workflow
 
       - name: Verify Kernel boundary
         run: npm run verify:kernel-boundary

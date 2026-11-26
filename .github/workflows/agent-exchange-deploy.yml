@@ -139,8 +139,8 @@ jobs:
             exit 0
           fi
 
-          echo "should_deploy=false" >> "$GITHUB_OUTPUT"
-          echo "Automatic workflow_run completed verification only; production deployment requires manual approval."
+          echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          echo "Successful main CI: automatically deploying the verified main revision."
 
   deploy:
     name: Deploy production Lambda
@@ -165,10 +165,20 @@ jobs:
         with:
           ref: ${{ needs.gate.outputs.deploy_sha }}
 
+      - name: Resolve supported Lambda runtime
+        run: |
+          set -euo pipefail
+          NODE_VERSION="$(tr -d '[:space:]v' < .nvmrc)"
+          [[ "$NODE_VERSION" =~ ^24\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::.nvmrc must pin the reviewed Node 24 release."
+            exit 1
+          }
+          echo "LAMBDA_RUNTIME=nodejs${NODE_VERSION%%.*}.x" >> "$GITHUB_ENV"
+
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "26.x"
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -205,10 +215,17 @@ jobs:
           set -euo pipefail
           aws sts get-caller-identity >/dev/null
           runtime="$(aws lambda get-function-configuration             --function-name "$FUNCTION_NAME"             --query 'Runtime'             --output text)"
-          test "$runtime" = "nodejs26.x"
+          case "$runtime" in
+            nodejs24.x|nodejs26.x) ;;
+            *)
+              echo "::error::Unexpected Lambda runtime $runtime; refusing an unreviewed runtime transition."
+              exit 1
+              ;;
+          esac
           echo "Target function: $FUNCTION_NAME"
           echo "Region: $AWS_REGION"
-          echo "Runtime: $runtime"
+          echo "Current runtime: $runtime"
+          echo "Target runtime: $LAMBDA_RUNTIME"
 
       - name: Capture exact production rollback package
         id: capture
@@ -220,6 +237,7 @@ jobs:
           PREVIOUS_REVISION="$(jq -r '.RevisionId' <<< "$config")"
           PREVIOUS_CODE_SHA="$(jq -r '.CodeSha256' <<< "$config")"
           PREVIOUS_LAST_MODIFIED="$(jq -r '.LastModified' <<< "$config")"
+          PREVIOUS_RUNTIME="$(jq -r '.Runtime' <<< "$config")"
 
           code_url="$(aws lambda get-function             --function-name "$FUNCTION_NAME"             --query 'Code.Location'             --output text)"
 
@@ -230,12 +248,14 @@ jobs:
           echo "PREVIOUS_REVISION=$PREVIOUS_REVISION" >> "$GITHUB_ENV"
           echo "PREVIOUS_CODE_SHA=$PREVIOUS_CODE_SHA" >> "$GITHUB_ENV"
           echo "PREVIOUS_LAST_MODIFIED=$PREVIOUS_LAST_MODIFIED" >> "$GITHUB_ENV"
+          echo "PREVIOUS_RUNTIME=$PREVIOUS_RUNTIME" >> "$GITHUB_ENV"
 
           {
             echo "### Rollback snapshot"
             echo "- Function: $FUNCTION_NAME"
             echo "- Previous CodeSha256: $PREVIOUS_CODE_SHA"
             echo "- Previous LastModified: $PREVIOUS_LAST_MODIFIED"
+            echo "- Previous runtime: $PREVIOUS_RUNTIME"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy verified package and publish immutable version
@@ -253,10 +273,25 @@ jobs:
           deployed="$(aws lambda get-function-configuration             --function-name "$FUNCTION_NAME"             --output json)"
 
           DEPLOYED_CODE_SHA="$(jq -r '.CodeSha256' <<< "$deployed")"
-          DEPLOYED_REVISION="$(jq -r '.RevisionId' <<< "$deployed")"
+          CODE_REVISION="$(jq -r '.RevisionId' <<< "$deployed")"
 
           if [ "$DEPLOYED_CODE_SHA" != "$LOCAL_CODE_SHA" ]; then
             echo "::error::AWS CodeSha256 does not match the locally verified package."
+            exit 1
+          fi
+
+          aws lambda update-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --runtime "$LAMBDA_RUNTIME" \
+            --revision-id "$CODE_REVISION" >/dev/null
+          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
+
+          deployed="$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" --output json)"
+          DEPLOYED_RUNTIME="$(jq -r '.Runtime' <<< "$deployed")"
+          DEPLOYED_REVISION="$(jq -r '.RevisionId' <<< "$deployed")"
+          if [ "$DEPLOYED_RUNTIME" != "$LAMBDA_RUNTIME" ]; then
+            echo "::error::Lambda runtime $DEPLOYED_RUNTIME does not match target $LAMBDA_RUNTIME."
             exit 1
           fi
 
@@ -265,11 +300,13 @@ jobs:
           echo "DEPLOYED_REVISION=$DEPLOYED_REVISION" >> "$GITHUB_ENV"
           echo "DEPLOYED_CODE_SHA=$DEPLOYED_CODE_SHA" >> "$GITHUB_ENV"
           echo "DEPLOYED_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "DEPLOYED_RUNTIME=$DEPLOYED_RUNTIME" >> "$GITHUB_ENV"
 
           {
             echo "### Deployment"
             echo "- Commit: $DEPLOY_SHA"
             echo "- CodeSha256: $DEPLOYED_CODE_SHA"
+            echo "- Lambda runtime: $DEPLOYED_RUNTIME"
             echo "- Published rollback/reference version: $VERSION"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -441,12 +478,14 @@ jobs:
           retry_json "$SMOKE_BASE_URL/openapi.json" /tmp/openapi.json
           retry_json "$SMOKE_BASE_URL/api/providers/status" /tmp/providers.json
           retry_json "$SMOKE_BASE_URL/api/marketplace/policy" /tmp/marketplace-policy.json
+          retry_json "$SMOKE_BASE_URL/api/privatepay/status" /tmp/privatepay-status.json
 
           jq -e '.services | type == "array" and length >= 24' /tmp/services.json >/dev/null
           jq -e '[.services[].id] | index("verify.basic") != null' /tmp/services.json >/dev/null
           jq -e '.openapi != null and .paths != null' /tmp/openapi.json >/dev/null
           jq -e '[.providers[] | select(.provider == "mongodb" and .role == "visitor-accounts-favorites-cart" and .status == "configured")] | length == 1' /tmp/providers.json >/dev/null
           jq -e '.seller_tiers.free.listing_fee_usd == 0 and (.seller_tiers | has("basic") and has("pro"))' /tmp/marketplace-policy.json >/dev/null
+          jq -e '.enabled == true and .operational == true and (.activation_blockers | length == 0) and .payment_link_buyer_checkout.funded_execution == "enabled"' /tmp/privatepay-status.json >/dev/null
 
           preflight_headers="$(curl --fail --silent --show-error --dump-header - --output /dev/null \
             -X OPTIONS "$SMOKE_BASE_URL/api/privatepay/x402/requirements" \
@@ -467,7 +506,7 @@ jobs:
           jq -e '.requirements.x402Version == 2 and .requirements.accepts[0].scheme == "exact-magicblock" and .requirements.accepts[0].network == "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" and .requirements.accepts[0].asset == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" and .requirements.accepts[0].amount == "500000" and .pdao.required == false' /tmp/privatepay-response >/dev/null
           grep -Eiq '^access-control-expose-headers:.*payment-required' /tmp/privatepay-headers
 
-          echo "Production smoke gate passed, including MongoDB accounts, seller-tier policy, canonical PrivatePAY requirements, and browser CORS."
+          echo "Production smoke gate passed, including MongoDB accounts, seller-tier policy, operational PrivatePAY checkout status, canonical x402 requirements, and browser CORS."
 
       - name: Reconcile payout runtime configuration
         id: payout_runtime
@@ -557,6 +596,24 @@ jobs:
             exit 1
           fi
 
+          RESTORED_REVISION="$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --query 'RevisionId' \
+            --output text)"
+          aws lambda update-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --runtime "$PREVIOUS_RUNTIME" \
+            --revision-id "$RESTORED_REVISION" >/dev/null
+          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
+          RESTORED_RUNTIME="$(aws lambda get-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --query 'Runtime' \
+            --output text)"
+          if [ "$RESTORED_RUNTIME" != "$PREVIOUS_RUNTIME" ]; then
+            echo "::error::Rollback runtime mismatch."
+            exit 1
+          fi
+
           DOMAIN="${PUBLIC_BASE_URL#https://}"
           DOMAIN="${DOMAIN%%/*}"
           API_ID="$(aws apigatewayv2 get-api-mappings \
@@ -602,6 +659,7 @@ jobs:
           {
             echo "### Automatic rollback"
             echo "- Restored CodeSha256: $RESTORED_CODE_SHA"
+            echo "- Restored Lambda runtime: $RESTORED_RUNTIME"
             echo "- Reason: deployment verification or production smoke gate failed."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -642,6 +700,7 @@ jobs:
             echo "- URL: $PUBLIC_BASE_URL"
             echo "- Commit: $DEPLOY_SHA"
             echo "- Lambda version: $DEPLOYED_VERSION"
+            echo "- Lambda runtime: $DEPLOYED_RUNTIME"
             echo "- CodeSha256: $DEPLOYED_CODE_SHA"
             echo "- Rollback package was captured before deployment and was not needed."
           } >> "$GITHUB_STEP_SUMMARY"

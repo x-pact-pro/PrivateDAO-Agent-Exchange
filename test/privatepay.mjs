@@ -112,6 +112,54 @@ test("PrivatePAY status exposes one activation-gated buyer checkout path", () =>
   });
 });
 
+test("PrivatePAY status reports funded checkout only when all payment gates pass", async () => {
+  const config = magicBlockCheckoutConfig({ privatePayMerchantId: TEST_PAYER });
+  const staticStatus = privatePayStatus(config);
+  assert.equal(staticStatus.enabled, true);
+  assert.equal(staticStatus.payment_link_buyer_checkout.funded_execution, "enabled");
+
+  const liveStatus = await probePrivatePayRail(config, async (url) => {
+    const target = String(url);
+    if (target.endsWith("/health")) return response(200, { status: "ok" });
+    if (target.endsWith("/v1/x402/supported")) {
+      return response(200, {
+        kinds: [{
+          x402Version: 2,
+          scheme: "exact-magicblock",
+          network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+          extra: { cluster: "mainnet-private" },
+        }],
+      });
+    }
+    if (target.includes("/v1/spl/stealth-pool")) return response(200, { exists: true });
+    if (target.includes("/v1/spl/balance")) {
+      return response(200, {
+        delegation: { status: "delegated", validator: MAGICBLOCK_TEE_VALIDATOR },
+        location: "base",
+      });
+    }
+    throw new Error(`unexpected provider probe ${url}`);
+  });
+  assert.equal(liveStatus.operational, true);
+  assert.equal(liveStatus.payment_link_buyer_checkout.funded_execution, "enabled");
+
+  const unavailableStatus = await probePrivatePayRail(config, async (url) => {
+    const target = String(url);
+    if (target.endsWith("/health")) return response(503, {});
+    if (target.endsWith("/v1/x402/supported")) return response(503, {});
+    if (target.includes("/v1/spl/stealth-pool")) return response(200, { exists: true });
+    if (target.includes("/v1/spl/balance")) {
+      return response(200, {
+        delegation: { status: "delegated", validator: MAGICBLOCK_TEE_VALIDATOR },
+        location: "base",
+      });
+    }
+    throw new Error(`unexpected provider probe ${url}`);
+  });
+  assert.equal(unavailableStatus.operational, false);
+  assert.equal(unavailableStatus.payment_link_buyer_checkout.funded_execution, "activation_gated");
+});
+
 test("MagicBlock merchant checkout follows the official payments contract", async () => {
   const calls = [];
   const result = await createPrivatePayCheckout(magicBlockCheckoutConfig(), {
