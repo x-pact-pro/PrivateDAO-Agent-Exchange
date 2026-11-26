@@ -1,0 +1,39 @@
+---
+description: PrivateDAO Agent Exchange source ownership, GitHub work, evidence and release contract.
+alwaysApply: true
+---
+
+This is the live `x-pact-pro/PrivateDAO-Agent-Exchange` source repository.
+Read its working instructions and the source/deployment evidence for the
+assigned task. The older AGENT-EXCHANGE-UNIFIED directory is an archive.
+
+On the owner's workstation, first read
+`/home/x-pact/PRIVATEPAY-X402-CANONICAL-STATE.md`, then
+`/home/x-pact/Desktop/PDAO-EXECUTION-TEAM-2026-11-21/START-HERE.md`.
+In a cloud checkout use committed instructions and the task's attached
+canonical-state evidence; explicitly report a missing input.
+
+Codex ORCH owns task allocation, integration and shared-file reservations.
+Cursor supports the assigned GitHub, CI, packaging and review tasks.
+Record task ID, repository, base SHA and owned paths. Use a branch/worktree
+for parallel writes and preserve other people's changes.
+
+Use publisher-native tools, existing authentication and the committed
+dependency lockfile. Local tool references are
+`/home/x-pact/PrivateDAO-TOOLS/TOOLCHAINS.md` and `registry/`.
+The user's terminal permissions, AWS/Bedrock authentication, OpenAI provider,
+proxy at `127.0.0.1:3003` and existing sessions remain outside these tasks.
+Keep credential values out of prompts, command arguments, logs and commits.
+
+Read the actual workflow and deployment target. Production deployment
+requires `workflow_dispatch` and `I_APPROVE_PRODUCTION_DEPLOY`; an inventory
+or environment task does not supply that approval. Region migration, IAM,
+DNS and cloud resource changes require the user's specific authorization.
+
+Reproduce failures, fix their causes and test the corrected source.
+Keep fixture tests, live reads, funded settlement and receipt verification
+distinct. Never claim Mainnet E2E from a quote, challenge, build or health check.
+Native security-tool results, not an agent opinion, supply security evidence.
+Public release/listing requires the current candidate's USER Mainnet/
+production acceptance, ORCH review, original security-tool reports and the
+applicable original publishing authorization.
