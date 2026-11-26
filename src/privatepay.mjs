@@ -1294,7 +1294,9 @@ export function privatePayStatus(config) {
       phase: "buyer",
       requires_idempotency_key: true,
       idempotency_key_format: "uuidv4",
-      funded_execution: "activation_gated",
+      funded_execution: config.privatePayMerchantCheckoutEnabled === true && enabled
+        ? "enabled"
+        : "activation_gated",
     },
     confidential_mint_configured: !mintProblem,
     confidential_mint_program: isMagicBlockRail(config) ? "magicblock-delegated-usdc" : String(config.privatePayConfidentialMintProgram || "") || null,
@@ -1474,6 +1476,10 @@ export async function probePrivatePayRail(config, fetchImpl = fetch) {
     && (isMagicBlockRail(config) ? result.mint_status === "delegated_usdc_private_rollup" && result.facilitator_status === "exact_magicblock_v2_mainnet_private" && result.stealth_handle_status === "initialized" && result.merchant_accounts_delegated : result.mint_status === "initialized_confidential_token2022" && result.facilitator_status === "privatepay_v2_mainnet")
     && status.enabled;
   result.enabled = result.operational;
+  result.payment_link_buyer_checkout.funded_execution =
+    config.privatePayMerchantCheckoutEnabled === true && result.operational
+      ? "enabled"
+      : "activation_gated";
   if (!result.operational) result.status = "not_ready";
   return result;
 }
