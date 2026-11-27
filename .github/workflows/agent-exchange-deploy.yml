@@ -237,9 +237,9 @@ jobs:
           aws sts get-caller-identity >/dev/null
           runtime="$(aws lambda get-function-configuration             --function-name "$FUNCTION_NAME"             --query 'Runtime'             --output text)"
           case "$runtime" in
-            nodejs24.x|nodejs26.x) ;;
+            nodejs24.x) ;;
             *)
-              echo "::error::Unexpected Lambda runtime $runtime; refusing an unreviewed runtime transition."
+              echo "::error::Expected Lambda runtime nodejs24.x, found $runtime."
               exit 1
               ;;
           esac

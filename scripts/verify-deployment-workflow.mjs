@@ -18,6 +18,7 @@ const requiredFragments = [
   'test "$AWS_REGION" = "us-east-1"',
   'test "$FUNCTION_NAME" = "PrivateDAOAgentExchange-Virginia-Standby"',
   'test "$API_NAME" = "PrivateDAO-AgentExchange-Virginia-Standby"',
+  "nodejs24.x) ;;",
   '--runtime "$LAMBDA_RUNTIME"',
   'echo "PREVIOUS_RUNTIME=$PREVIOUS_RUNTIME" >> "$GITHUB_ENV"',
   'echo "- Restored Lambda runtime: $RESTORED_RUNTIME"',
@@ -42,6 +43,9 @@ const requiredFragments = [
 
 for (const fragment of requiredFragments) {
   if (!workflow.includes(fragment)) throw new Error(`deployment workflow is missing: ${fragment}`);
+}
+if (workflow.includes("nodejs26.x")) {
+  throw new Error("production deployment must reject Lambda runtimes outside nodejs24.x");
 }
 
 if (nodePin.trim() !== "24.10.0" || packageJson.engines?.node !== "24.10.0") {
