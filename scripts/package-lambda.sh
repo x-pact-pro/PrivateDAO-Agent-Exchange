@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+node scripts/provider-conformance-gate.mjs --surface lambda
+
 OUTPUT_PATH=${1:-/tmp/privatedao-agent-exchange.zip}
 PACKAGE_DIR=$(mktemp -d)
 trap 'rm -rf "$PACKAGE_DIR"' EXIT
@@ -28,9 +30,9 @@ test -f "$PACKAGE_DIR/assets/clients/openclaw-symbol.png"
   # Backup/archive mounts may reject npm's executable symlinks; Lambda does
   # not need node_modules/.bin in the runtime bundle.
   npm ci --bin-links=false --ignore-scripts --no-audit --no-fund
-  node node_modules/esbuild/bin/esbuild .browser/solana-web3-entry.mjs --bundle --minify --format=esm --platform=browser --target=es2020 --outfile=assets/browser/solana-web3.mjs
-  node node_modules/esbuild/bin/esbuild .browser/spl-token-entry.mjs --bundle --minify --format=esm --platform=browser --target=es2020 --outfile=assets/browser/spl-token.mjs
-  node node_modules/esbuild/bin/esbuild .browser/8004-solana-entry.mjs --bundle --minify --format=esm --platform=browser --target=es2020 --external:crypto --external:node:fs --external:fs/promises --outfile=assets/browser/8004-solana.mjs
+  node_modules/esbuild/bin/esbuild .browser/solana-web3-entry.mjs --bundle --minify --format=esm --platform=browser --target=es2020 --outfile=assets/browser/solana-web3.mjs
+  node_modules/esbuild/bin/esbuild .browser/spl-token-entry.mjs --bundle --minify --format=esm --platform=browser --target=es2020 --outfile=assets/browser/spl-token.mjs
+  node_modules/esbuild/bin/esbuild .browser/8004-solana-entry.mjs --bundle --minify --format=esm --platform=browser --target=es2020 --external:crypto --external:node:fs --external:fs/promises --outfile=assets/browser/8004-solana.mjs
   rm -rf .browser
   npm prune --bin-links=false --omit=dev --ignore-scripts --no-audit --no-fund
   node --check src/handler.mjs

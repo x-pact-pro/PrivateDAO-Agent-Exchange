@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { getPrivatePaySignatureStatus } from "../src/privatepay-mainnet.mjs";
 
 const run = promisify(execFile);
-const publicStatusUrl = process.env.PRIVATEPAY_PUBLIC_STATUS_URL || "https://agents.privatedao.org/api/privatepay/status";
+const publicStatusUrl = process.env.PRIVATEPAY_PUBLIC_STATUS_URL || "https://agent.pdaowallet.com/api/privatepay/status";
 const artifactPath = resolve(process.env.PRIVATEPAY_DEPOSIT_OUTPUT || "output/privatepay/merchant-deposit-unsigned.json");
 const outputPath = resolve(process.env.PRIVATEPAY_EVIDENCE_OUTPUT || "output/privatepay/release-evidence.json");
 

@@ -71,7 +71,7 @@ function magicBlockConfig() {
 function providerPayload() {
   return {
     x402Version: 2,
-    resource: { url: "https://agents.privatedao.org/api/privatepay/conformance", description: "PrivatePAY x402 resource", mimeType: "application/json" },
+    resource: { url: "https://agent.pdaowallet.com/api/privatepay/conformance", description: "PrivatePAY x402 resource", mimeType: "application/json" },
     accepted: {
       scheme: "exact-magicblock",
       network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
@@ -85,7 +85,7 @@ function providerPayload() {
   };
 }
 
-test("MagicBlock x402 forwarding preserves the provider payment id and exact requirements", async () => {
+test("PrivatePAY x402 forwarding to MagicBlock preserves the provider payment id and exact requirements", async () => {
   const calls = [];
   const payload = providerPayload();
   const fetchImpl = async (url, options) => {

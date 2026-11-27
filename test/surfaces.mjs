@@ -121,7 +121,7 @@ test("human root is HTML while machine surfaces remain available", async () => {
   const robots = await request("/robots.txt");
   assert.match(robots.body, /Allow: \/sellers/);
   const sitemap = await request("/sitemap.xml");
-  assert.match(sitemap.body, /https:\/\/agents\.privatedao\.org\/sellers/);
+  assert.match(sitemap.body, /https:\/\/agent\.pdaowallet\.com\/sellers/);
   assert.match(sellerPortal.body, /Do not submit another payment/);
   assert.match(sellerPortal.body, /state\.paymentSignature=sent\.signature/);
   assert.match(sellerPortal.body, /Retry verification \(do not pay again\)/);
@@ -151,7 +151,7 @@ test("human root is HTML while machine surfaces remain available", async () => {
   const catalog = JSON.parse((await request("/api/services")).body);
   const tokenService = catalog.services.find((service) => service.id === "token.intelligence");
   assert.equal(tokenService.payment_network, "solana-mainnet-beta");
-  assert.deepEqual(tokenService.supported_target_networks, ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"]);
+  assert.deepEqual(tokenService.supported_target_networks, ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet", "robinhood-mainnet"]);
   assert.equal(tokenService.input_schema.type, "object");
   assert.equal(tokenService.output_schema.type, "object");
   assert.deepEqual(tokenService.input_schema.required, ["network"]);
@@ -161,7 +161,7 @@ test("human root is HTML while machine surfaces remain available", async () => {
   assert.ok(walletService.input_schema.anyOf.some((branch) => branch.required.includes("wallet")));
   const botService = catalog.services.find((service) => service.id === "wallet.bot.classify");
   assert.equal(botService.price, 1.5);
-  assert.deepEqual(botService.supported_target_networks, ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"]);
+  assert.deepEqual(botService.supported_target_networks, ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet", "robinhood-mainnet"]);
   assert.ok(botService.input_schema.anyOf.some((branch) => branch.required.includes("wallet")));
   const botPage = await request("/services/wallet-bot-classify");
   assert.equal(botPage.statusCode, 200);
@@ -549,13 +549,14 @@ test("every catalog capability has a stable detail page", async () => {
     assert.match(response.headers["content-type"], /^text\/html/, service.id);
     assert.match(response.body, new RegExp(service.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), service.id);
     if (service.id === "privatepay.x402") {
-      assert.match(response.body, /https:\/\/agents\.privatedao\.org\/services\/privatepay-x402/, service.id);
-      assert.doesNotMatch(response.body, /https:\/\/agents\.privatedao\.org\/api\/privatepay\/conformance/, service.id);
+      assert.match(response.body, /https:\/\/agent\.pdaowallet\.com\/services\/privatepay-x402/, service.id);
+      assert.doesNotMatch(response.body, /https:\/\/agent\.pdaowallet\.com\/api\/privatepay\/conformance/, service.id);
       assert.match(response.body, /Activation gated/, service.id);
       assert.match(response.body, /\/api\/privatepay\/status/, service.id);
       assert.doesNotMatch(response.body, /Pay quoted USDC/, service.id);
       if (response.body.includes("privatepay-magic-shell")) {
-        assert.match(response.body, /Powered by MagicBlock · Solana Mainnet/, service.id);
+        assert.match(response.body, /PrivatePAY x402 by PDAO Wallet/, service.id);
+        assert.match(response.body, /MagicBlock private SPL settlement/, service.id);
         assert.match(response.body, /Payment.*Swap.*Shield.*Request/, service.id);
         assert.match(response.body, /Connect wallet and pay/, service.id);
       } else {
@@ -595,11 +596,11 @@ test("every catalog capability has a stable detail page", async () => {
 test("crawler files expose the intended public surfaces", async () => {
   resetForTests();
   const robots = await request("/robots.txt");
-  assert.match(robots.body, /Sitemap: https:\/\/agents\.privatedao\.org\/sitemap\.xml/);
+  assert.match(robots.body, /Sitemap: https:\/\/agent\.pdaowallet\.com\/sitemap\.xml/);
   const sitemap = await request("/sitemap.xml");
   assert.equal(sitemap.statusCode, 200);
   assert.match(sitemap.headers["content-type"], /^application\/xml/);
-  assert.match(sitemap.body, /<loc>https:\/\/agents\.privatedao\.org\/<\/loc>/);
+  assert.match(sitemap.body, /<loc>https:\/\/agent\.pdaowallet\.com\/<\/loc>/);
 });
 
 test("MCP and A2A machine entrypoints remain callable", async () => {
@@ -608,7 +609,7 @@ test("MCP and A2A machine entrypoints remain callable", async () => {
     const page = await request(path);
     assert.equal(page.statusCode, 200, path);
     assert.match(page.headers["content-type"], /^text\/html/, path);
-    assert.match(page.body, /agents\.privatedao\.org\/mcp/, path);
+    assert.match(page.body, /agent\.pdaowallet\.com\/mcp/, path);
     assert.match(page.body, /streamable-http/, path);
     assert.match(page.body, /PDAO/, path);
   }
@@ -634,8 +635,8 @@ test("MCP and A2A machine entrypoints remain callable", async () => {
   const robots = await request("/robots.txt");
   assert.match(robots.body, /Allow: \/connect\/grok/);
   const sitemap = await request("/sitemap.xml");
-  assert.match(sitemap.body, /<loc>https:\/\/agents\.privatedao\.org\/connect\/grok<\/loc>/);
-  assert.match(sitemap.body, /<loc>https:\/\/agents\.privatedao\.org\/mcp<\/loc>/);
+  assert.match(sitemap.body, /<loc>https:\/\/agent\.pdaowallet\.com\/connect\/grok<\/loc>/);
+  assert.match(sitemap.body, /<loc>https:\/\/agent\.pdaowallet\.com\/mcp<\/loc>/);
   const a2a = await request("/a2a", "POST", { jsonrpc: "2.0", id: 1, method: "message/send", params: { message: { parts: [{ text: "discover" }] } } });
   assert.equal(a2a.statusCode, 200);
   assert.match(a2a.headers["content-type"], /^application\/json/);
@@ -1308,7 +1309,7 @@ test("first-party exchange appears in machine discovery without becoming an exte
   })).body);
   assert.deepEqual(search.agents, []);
   assert.equal(search.first_party.length, 1);
-  assert.equal(search.first_party[0].mcp_url, "https://agents.privatedao.org/mcp");
+  assert.equal(search.first_party[0].mcp_url, "https://agent.pdaowallet.com/mcp");
 
   const unrelated = JSON.parse((await handler({
     requestContext: { http: { method: "GET", path: "/api/registry/search" } },

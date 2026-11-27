@@ -7,7 +7,7 @@ const apiBase = process.env.PRIVATEPAY_API_BASE || "https://payments.magicblock.
 const outputPath = resolve(process.env.PRIVATEPAY_X402_ARTIFACT_OUTPUT || "output/privatepay/x402-payment-unsigned.json");
 const payer = process.env.PRIVATEPAY_TEST_PAYER || "BkNcuvQZr6392aZCwcGnB6SQptV6vhWa7syJs5fgLz6";
 const externalReference = process.env.PRIVATEPAY_EXTERNAL_REFERENCE || `privatepay-x402-${Date.now()}`;
-const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "eu-north-1" });
+const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
 const secretResponse = await client.send(new GetSecretValueCommand({
   SecretId: process.env.PRIVATEPAY_SECRET_ID || "pdao/agent-exchange/privatepay-production",
 }));
@@ -21,7 +21,7 @@ const headers = {
   "x-merchant-id": secret.PRIVATEPAY_MERCHANT_ID,
 };
 const amount = process.env.PRIVATEPAY_X402_AMOUNT || "500000";
-const resource = process.env.PRIVATEPAY_X402_RESOURCE || "https://agents.privatedao.org/services/privatepay-x402";
+const resource = process.env.PRIVATEPAY_X402_RESOURCE || "https://agent.pdaowallet.com/services/privatepay-x402";
 const requestHash = crypto.createHash("sha256").update(externalReference).digest("hex");
 const create = await fetch(`${apiBase}/v1/payments`, {
   method: "POST",

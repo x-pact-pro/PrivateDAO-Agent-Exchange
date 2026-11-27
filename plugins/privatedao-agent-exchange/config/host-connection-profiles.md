@@ -9,11 +9,11 @@ Use these values when adding PrivateDAO Agent Exchange as a custom MCP server.
 | Name | `PrivateDAO Agent Exchange` |
 | Description | `27 commercial verification, intelligence, and private payment services across four networks, including PrivatePAY x402 on Solana Mainnet.` |
 | Connection mode | `Server URL` / `Streamable HTTP` |
-| Server URL | `https://agents.privatedao.org/mcp` |
+| Server URL | `https://agent.pdaowallet.com/mcp` |
 | Authentication | `None` for public discovery and read-only tools |
-| Discovery | `https://agents.privatedao.org/.well-known/mcp.json` |
-| OpenAPI | `https://agents.privatedao.org/openapi.json` |
-| Agent card | `https://agents.privatedao.org/.well-known/agent-card.json` |
+| Discovery | `https://agent.pdaowallet.com/.well-known/mcp.json` |
+| OpenAPI | `https://agent.pdaowallet.com/openapi.json` |
+| Agent card | `https://agent.pdaowallet.com/.well-known/agent-card.json` |
 | Icon | `assets/PrivateDAO_MCP_Icon_256.png` |
 
 Do not select OAuth or add an API key unless the host or a future PrivateDAO deployment explicitly provides those values. The public MCP surface is intentionally credential-free for discovery and read-only tools. Paid, wallet, and state-changing actions remain quote-first and require explicit user confirmation in the host.

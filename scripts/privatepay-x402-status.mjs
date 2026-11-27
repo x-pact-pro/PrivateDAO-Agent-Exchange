@@ -6,7 +6,7 @@ const artifactPath = process.env.PRIVATEPAY_X402_ARTIFACT_PATH || "output/privat
 const artifact = JSON.parse(await readFile(artifactPath, "utf8"));
 if (!/^[a-f0-9]{64}$/.test(String(artifact.paymentId || ""))) throw new Error("Artifact paymentId is invalid");
 
-const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "eu-north-1" });
+const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
 const secretResponse = await client.send(new GetSecretValueCommand({
   SecretId: process.env.PRIVATEPAY_SECRET_ID || "pdao/agent-exchange/privatepay-production",
 }));

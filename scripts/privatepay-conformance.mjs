@@ -1,7 +1,8 @@
 import { PublicKey } from "@solana/web3.js";
 import { digest } from "../src/canonical.mjs";
+import { MAGICBLOCK_MAINNET_TEE_RPC } from "../src/magicblock-topology.mjs";
 
-const DEFAULT_RPC = "https://mainnet.magicblock.app";
+const DEFAULT_RPC = MAGICBLOCK_MAINNET_TEE_RPC;
 const DEFAULT_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SPL_PP_PROGRAM_ID = new PublicKey("SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2");
 const EXECUTE_LINE = "Instruction: ExecuteReadyQueuedTransfer";

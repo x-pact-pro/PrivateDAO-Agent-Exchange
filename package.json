@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "24.x"
+    "node": "24.10.0"
   },
   "scripts": {
     "test:surfaces": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node --test test/surfaces.mjs",
@@ -24,7 +24,11 @@
     "privatepay:x402-verify-settle": "node scripts/privatepay-x402-verify-settle.mjs",
     "privatepay:x402-submit": "node scripts/privatepay-x402-submit.mjs",
     "lint": "node --check src/*.mjs test/*.mjs scripts/*.mjs",
-    "package": "bash scripts/package-lambda.sh"
+    "package": "bash scripts/package-lambda.sh",
+    "provider:gate": "node scripts/provider-conformance-gate.mjs",
+    "pretest": "npm run provider:gate",
+    "presmoke": "npm run provider:gate",
+    "prepackage": "npm run provider:gate -- --surface lambda"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1136.0",

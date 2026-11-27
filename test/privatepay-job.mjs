@@ -201,6 +201,7 @@ test("PrivatePAY job lifecycle verifies, settles, executes once, and redacts pub
     assert.equal(JSON.parse(pending.body).status, "pending");
     const completed = await request(`/api/jobs/${jobId}/privatepay`, "POST", undefined, { "PAYMENT-SIGNATURE": paymentSignature });
     assert.equal(completed.statusCode, 200);
+    assert.match(completed.headers["PAYMENT-RESPONSE"], /^[A-Za-z0-9+/=_-]+$/);
     const result = JSON.parse(completed.body);
     assert.equal(result.status, "completed");
     assert.equal(result.receipt.status, "VERIFIED");
@@ -255,6 +256,7 @@ test("PrivatePAY job lifecycle verifies, settles, executes once, and redacts pub
     const replay = await request(`/api/jobs/${jobId}/privatepay`, "POST", undefined, { "PAYMENT-SIGNATURE": paymentSignature });
     assert.equal(replay.statusCode, 200);
     assert.equal(JSON.parse(replay.body).receipt.receipt_id, result.receipt.receipt_id);
+    assert.equal(replay.headers["PAYMENT-RESPONSE"], completed.headers["PAYMENT-RESPONSE"]);
     assert.deepEqual(calls, ["verify", "settle", "settle"]);
   } finally {
     globalThis.fetch = originalFetch;

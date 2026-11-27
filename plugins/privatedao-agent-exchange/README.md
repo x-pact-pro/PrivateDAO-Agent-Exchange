@@ -22,8 +22,8 @@ This portable plugin package gives an AI assistant:
 - Website: https://privatedao.org/
 - Thesis: https://privatedao.org/thesis/
 - PDAO: https://privatedao.org/token/
-- Agent Exchange: https://agents.privatedao.org/
-- MCP: https://agents.privatedao.org/mcp
+- Agent Exchange: https://agent.pdaowallet.com/
+- MCP: https://agent.pdaowallet.com/mcp
 - PrivatePAY: https://privatedao.org/privatepay
 - GitHub: https://github.com/X-PACT/PrivateDAO
 
@@ -34,7 +34,7 @@ For the ChatGPT or Glama custom-server form, use the exact values in
 
 - Name: `PrivateDAO Agent Exchange`
 - Description: `27 commercial verification, intelligence, and private payment services across four networks, including PrivatePAY x402 on Solana Mainnet.`
-- Server URL: `https://agents.privatedao.org/mcp`
+- Server URL: `https://agent.pdaowallet.com/mcp`
 - Authentication: `None`
 
 OAuth is not configured for the public MCP endpoint. Do not invent a token or add a secret. The host's own account permissions are separate from MCP authentication.

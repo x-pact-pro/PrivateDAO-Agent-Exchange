@@ -2,9 +2,16 @@ import { PublicKey } from "@solana/web3.js";
 import { createHash, randomBytes } from "node:crypto";
 import * as dcap from "@phala/dcap-qvl";
 import { digest } from "./canonical.mjs";
+import {
+  MAGICBLOCK_MAINNET_TEE_RPC,
+  MAGICBLOCK_MAINNET_US_ER_RPC,
+} from "./magicblock-topology.mjs";
 
-export const DEFAULT_PRIVATEPAY_MAINNET_RPC = "https://mainnet.magicblock.app";
-export const DEFAULT_PRIVATEPAY_TEE_RPC = "https://mainnet-tee.magicblock.app";
+// PrivatePAY reads stay on the provider's private TEE endpoint. The public US
+// ER is exported separately for regional, non-private ER operations.
+export const DEFAULT_PRIVATEPAY_TEE_RPC = MAGICBLOCK_MAINNET_TEE_RPC;
+export const DEFAULT_PRIVATEPAY_MAINNET_RPC = DEFAULT_PRIVATEPAY_TEE_RPC;
+export const DEFAULT_MAGICBLOCK_US_ER_RPC = MAGICBLOCK_MAINNET_US_ER_RPC;
 export const SPL_PP_PROGRAM_ID = "SPLxh1LVZzEkX99H6rqYizhytLWPZVV296zyYDPagv2";
 export const EXECUTE_READY_QUEUED_TRANSFER = "Instruction: ExecuteReadyQueuedTransfer";
 

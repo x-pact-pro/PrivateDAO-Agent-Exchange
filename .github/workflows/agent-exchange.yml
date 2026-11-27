@@ -31,8 +31,14 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Enforce Node.js 24.10.0
+        run: test "$(node --version)" = "v24.10.0" && test "$(cat .nvmrc)" = "24.10.0"
+
       - name: Install Lambda dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Enforce official provider contracts
+        run: npm run provider:gate
 
       - name: Syntax and tests
         run: npm run lint && npm test && npm run smoke

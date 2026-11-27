@@ -19,16 +19,16 @@ Official pages:
 
 PrivateDAO Agent Exchange is a commercial MCP-compatible marketplace with 27 current services: PrivatePAY x402 plus 26 verification, intelligence, research, transaction, receipt, and agent-discovery services.
 
-- Marketplace: https://agents.privatedao.org/marketplace
-- MCP: https://agents.privatedao.org/mcp
-- OpenAPI: https://agents.privatedao.org/openapi.json
-- Service catalog: https://agents.privatedao.org/services
+- Marketplace: https://agent.pdaowallet.com/marketplace
+- MCP: https://agent.pdaowallet.com/mcp
+- OpenAPI: https://agent.pdaowallet.com/openapi.json
+- Service catalog: https://agent.pdaowallet.com/services
 
 ### PrivatePAY x402
 
 PrivatePAY x402 is a live Agent Exchange service for privacy-preserving x402 payment challenges and settlement status.
 
-- Service page: https://agents.privatedao.org/services/privatepay-x402
+- Service page: https://agent.pdaowallet.com/services/privatepay-x402
 - Network: Solana Mainnet
 - Execution rail: MagicBlock private rollup settlement
 - Public evidence described by the service: request commitment and settlement status
@@ -44,7 +44,7 @@ Write a [language] [platform] post for [audience] introducing [product]. Include
 
 ### PrivatePAY post
 
-Write three versions for [platforms] explaining that PrivatePAY x402 is a live Solana Mainnet service inside PrivateDAO Agent Exchange. Mention MagicBlock private rollup settlement, request commitment, and settlement status. Explain the customer flow in plain language. Do not claim absolute anonymity. Link to https://agents.privatedao.org/services/privatepay-x402.
+Write three versions for [platforms] explaining that PrivatePAY x402 is a live Solana Mainnet service inside PrivateDAO Agent Exchange. Mention MagicBlock private rollup settlement, request commitment, and settlement status. Explain the customer flow in plain language. Do not claim absolute anonymity. Link to https://agent.pdaowallet.com/services/privatepay-x402.
 
 ### Investor or partner brief
 

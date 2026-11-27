@@ -1,3 +1,11 @@
+import {
+  MAGICBLOCK_MAINNET_ROUTER_RPC,
+  MAGICBLOCK_MAINNET_TEE_RPC,
+  MAGICBLOCK_MAINNET_TEE_VALIDATOR,
+  MAGICBLOCK_MAINNET_US_ER_RPC,
+  MAGICBLOCK_MAINNET_US_VALIDATOR,
+} from "./magicblock-topology.mjs";
+
 const bool = (value, fallback = false) =>
   value == null ? fallback : value === "true" || value === "1";
 const boundedNumber = (value, fallback, min, max) => {
@@ -19,8 +27,8 @@ export function getConfig(env = process.env) {
       ].map(([network, key]) => [network, env[key] || ""]).filter(([, value]) => value),
   );
   return {
-    region: env.AWS_REGION || "eu-north-1",
-    domain: env.AGENT_DOMAIN || "agents.privatedao.org",
+    region: env.AWS_REGION || "us-east-1",
+    domain: env.AGENT_DOMAIN || "agent.pdaowallet.com",
     // Browser-hosted MCP clients need CORS. These endpoints do not accept
     // browser credentials, so wildcard is safe by default and deployments
     // can narrow it with AGENT_EXCHANGE_CORS_ORIGIN.
@@ -134,9 +142,8 @@ export function getConfig(env = process.env) {
     privatePayFacilitatorUrl: env.PRIVATEPAY_FACILITATOR_URL || "",
     privatePayFacilitatorApiKey: env.PRIVATEPAY_FACILITATOR_API_KEY || "",
     privatePayMerchantId: env.PRIVATEPAY_MERCHANT_ID || env.PRIVATEPAY_PROVIDER_WALLET || "",
-    // Merchant checkout is a separate remote-side capability and remains
-    // disabled until the official MagicBlock flow is reviewed and funded E2E
-    // evidence exists.
+    // Merchant checkout is separately controlled from the general PrivatePAY
+    // rail. Status reports it as enabled only when both gates and rail checks pass.
     privatePayMerchantCheckoutEnabled: bool(env.PRIVATEPAY_MERCHANT_CHECKOUT_ENABLED),
     privatePayMerchantAccountsDelegated: bool(env.PRIVATEPAY_MERCHANT_ACCOUNTS_DELEGATED),
     privatePayStealthPoolToken: env.PRIVATEPAY_STEALTH_POOL_TOKEN || "",
@@ -171,8 +178,13 @@ export function getConfig(env = process.env) {
     privatePayX402PayTo: env.PRIVATEPAY_X402_PAY_TO || env.PRIVATEPAY_TREASURY || env.SOLANA_TREASURY || "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
     // Pin MagicBlock private transfers to the reviewed TEE validator. Regional
     // validators require a separately reviewed deployment decision.
-    privatePayMainnetValidator: env.PRIVATEPAY_MAINNET_VALIDATOR || "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo",
-    privatePayRpcUrl: env.PRIVATEPAY_RPC_URL || "",
+    privatePayMainnetValidator: env.PRIVATEPAY_MAINNET_VALIDATOR || MAGICBLOCK_MAINNET_TEE_VALIDATOR,
+    privatePayRpcUrl: env.PRIVATEPAY_RPC_URL || MAGICBLOCK_MAINNET_TEE_RPC,
+    magicBlockRouterRpc: env.MAGICBLOCK_ROUTER_RPC || MAGICBLOCK_MAINNET_ROUTER_RPC,
+    magicBlockUsErRpc: env.MAGICBLOCK_US_ER_RPC || MAGICBLOCK_MAINNET_US_ER_RPC,
+    magicBlockUsValidator: env.MAGICBLOCK_US_VALIDATOR || MAGICBLOCK_MAINNET_US_VALIDATOR,
+    magicBlockTeeRpc: env.MAGICBLOCK_TEE_RPC || MAGICBLOCK_MAINNET_TEE_RPC,
+    magicBlockTeeValidator: env.MAGICBLOCK_TEE_VALIDATOR || MAGICBLOCK_MAINNET_TEE_VALIDATOR,
     privatePayCluster: env.PRIVATEPAY_CLUSTER || "mainnet-beta",
     privatePayRequireGasless: bool(env.PRIVATEPAY_REQUIRE_GASLESS, true),
     // A facilitator success response is not an on-chain settlement receipt.

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 
-const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "eu-north-1" });
+const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
 const response = await client.send(new GetSecretValueCommand({
   SecretId: process.env.PRIVATEPAY_SECRET_ID || "pdao/agent-exchange/privatepay-production",
 }));
@@ -20,7 +20,7 @@ const body = {
   amount: "500000",
   cluster: "mainnet-private",
   description: "PrivatePAY conformance checkout",
-  resource: "https://agents.privatedao.org/services/privatepay-x402",
+  resource: "https://agent.pdaowallet.com/services/privatepay-x402",
   requestHash: crypto.createHash("sha256").update(externalReference).digest("hex"),
   expiresInSeconds: 600,
   payer,

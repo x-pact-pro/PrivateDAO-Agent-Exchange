@@ -9,7 +9,7 @@ if (paymentPayload.x402Version !== 2 || !paymentPayload.accepted || typeof payme
 if (paymentPayload.accepted.extra?.paymentId !== artifact.paymentId)
   throw new Error("Payment payload is not bound to the inspected artifact");
 
-const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "eu-north-1" });
+const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
 const secretResponse = await client.send(new GetSecretValueCommand({ SecretId: process.env.PRIVATEPAY_SECRET_ID || "pdao/agent-exchange/privatepay-production" }));
 const secret = JSON.parse(secretResponse.SecretString || "{}");
 if (!secret.PRIVATEPAY_FACILITATOR_API_KEY || !secret.PRIVATEPAY_MERCHANT_ID) throw new Error("PrivatePAY merchant credentials are incomplete");

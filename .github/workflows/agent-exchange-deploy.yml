@@ -65,6 +65,18 @@ jobs:
           test -n "$FUNCTION_NAME" || { echo "::error::AGENT_EXCHANGE_FUNCTION_NAME is not configured."; exit 1; }
           test -n "$PUBLIC_BASE_URL" || { echo "::error::AGENT_EXCHANGE_PUBLIC_BASE_URL is not configured."; exit 1; }
           test -n "$SMOKE_BASE_URL" || { echo "::error::AGENT_EXCHANGE_SMOKE_BASE_URL is not configured."; exit 1; }
+          test "$AWS_REGION" = "us-east-1" || {
+            echo "::error::Production Agent Exchange deployments are restricted to Virginia (us-east-1)."
+            exit 1
+          }
+          test "$FUNCTION_NAME" = "PrivateDAOAgentExchange-Virginia-Standby" || {
+            echo "::error::Production Agent Exchange deployments are restricted to the Virginia Lambda."
+            exit 1
+          }
+          case "$PUBLIC_BASE_URL" in
+            https://agent.pdaowallet.com|https://agents.pdaowallet.com|https://agents.privatedao.org) ;;
+            *) echo "::error::Public base URL must be a verified Virginia Agent Exchange domain."; exit 1 ;;
+          esac
 
       - name: Require explicit production approval for deployment
         if: github.event_name == 'workflow_dispatch'
@@ -159,6 +171,14 @@ jobs:
         run: |
           echo "PACKAGE_PATH=$RUNNER_TEMP/privatedao-agent-exchange.zip" >> "$GITHUB_ENV"
           echo "PREVIOUS_PACKAGE_PATH=$RUNNER_TEMP/privatedao-agent-exchange.previous.zip" >> "$GITHUB_ENV"
+          echo "PREVIOUS_ENVIRONMENT_PATH=$RUNNER_TEMP/privatedao-agent-exchange.environment.previous.json" >> "$GITHUB_ENV"
+          echo "PREVIOUS_INTEGRATIONS_PATH=$RUNNER_TEMP/privatedao-agent-exchange.integrations.previous.json" >> "$GITHUB_ENV"
+          echo "PREVIOUS_CORS_PATH=$RUNNER_TEMP/privatedao-agent-exchange.cors.previous.json" >> "$GITHUB_ENV"
+          echo "PREVIOUS_SCHEDULE_PATH=$RUNNER_TEMP/privatedao-agent-exchange.schedule.previous.json" >> "$GITHUB_ENV"
+          echo "PREVIOUS_SCHEDULE_TARGETS_PATH=$RUNNER_TEMP/privatedao-agent-exchange.schedule-targets.previous.json" >> "$GITHUB_ENV"
+          echo "PREVIOUS_SCHEDULE_EXISTS_PATH=$RUNNER_TEMP/privatedao-agent-exchange.schedule-exists.previous" >> "$GITHUB_ENV"
+          echo "PREVIOUS_LAMBDA_POLICY_SIDS_PATH=$RUNNER_TEMP/privatedao-agent-exchange.lambda-policy-sids.previous.json" >> "$GITHUB_ENV"
+          echo "API_ID_PATH=$RUNNER_TEMP/privatedao-agent-exchange.api-id" >> "$GITHUB_ENV"
 
       - name: Checkout gated revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -169,8 +189,8 @@ jobs:
         run: |
           set -euo pipefail
           NODE_VERSION="$(tr -d '[:space:]v' < .nvmrc)"
-          [[ "$NODE_VERSION" =~ ^24\.[0-9]+\.[0-9]+$ ]] || {
-            echo "::error::.nvmrc must pin the reviewed Node 24 release."
+          [[ "$NODE_VERSION" == "24.10.0" ]] || {
+            echo "::error::.nvmrc must pin Node.js 24.10.0 exactly."
             exit 1
           }
           echo "LAMBDA_RUNTIME=nodejs${NODE_VERSION%%.*}.x" >> "$GITHUB_ENV"
@@ -187,6 +207,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --no-audit --no-fund
+          npm run provider:gate -- --surface lambda
           npm run lint
           npm test
           npm run smoke
@@ -226,6 +247,15 @@ jobs:
           echo "Region: $AWS_REGION"
           echo "Current runtime: $runtime"
           echo "Target runtime: $LAMBDA_RUNTIME"
+          DOMAIN="${PUBLIC_BASE_URL#https://}"
+          DOMAIN="${DOMAIN%%/*}"
+          API_ID="$(aws apigatewayv2 get-api-mappings --domain-name "$DOMAIN" --region "$AWS_REGION" --query 'Items[0].ApiId' --output text)"
+          test -n "$API_ID" && test "$API_ID" != "None"
+          API_NAME="$(aws apigatewayv2 get-api --api-id "$API_ID" --region "$AWS_REGION" --query 'Name' --output text)"
+          test "$API_NAME" = "PrivateDAO-AgentExchange-Virginia-Standby" || {
+            echo "::error::The configured public domain does not route to the verified Virginia API."
+            exit 1
+          }
 
       - name: Capture exact production rollback package
         id: capture
@@ -238,6 +268,33 @@ jobs:
           PREVIOUS_CODE_SHA="$(jq -r '.CodeSha256' <<< "$config")"
           PREVIOUS_LAST_MODIFIED="$(jq -r '.LastModified' <<< "$config")"
           PREVIOUS_RUNTIME="$(jq -r '.Runtime' <<< "$config")"
+          jq -c '.Environment // {Variables:{}}' <<< "$config" > "$PREVIOUS_ENVIRONMENT_PATH"
+
+          DOMAIN="${PUBLIC_BASE_URL#https://}"
+          DOMAIN="${DOMAIN%%/*}"
+          API_ID="$(aws apigatewayv2 get-api-mappings --domain-name "$DOMAIN" --region "$AWS_REGION" --query 'Items[0].ApiId' --output text)"
+          test -n "$API_ID" && test "$API_ID" != "None"
+          printf '%s\n' "$API_ID" > "$API_ID_PATH"
+          aws apigatewayv2 get-integrations --api-id "$API_ID" --region "$AWS_REGION" --output json > "$PREVIOUS_INTEGRATIONS_PATH"
+          jq -e '.Items | type == "array" and length > 0 and all(.[]; .IntegrationId != null and .IntegrationUri != null and .PayloadFormatVersion != null and .TimeoutInMillis != null)' "$PREVIOUS_INTEGRATIONS_PATH" >/dev/null
+          aws apigatewayv2 get-api --api-id "$API_ID" --region "$AWS_REGION" --output json | jq -c '.CorsConfiguration // {}' > "$PREVIOUS_CORS_PATH"
+
+          RULE_NAME="PrivateDAOAgentExchangeSettlementSchedule"
+          if aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" --output json > "$PREVIOUS_SCHEDULE_PATH" 2>/dev/null; then
+            echo "true" > "$PREVIOUS_SCHEDULE_EXISTS_PATH"
+            jq 'with_entries(select(.key | IN("Name", "ScheduleExpression", "ScheduleExpressionTimezone", "EventPattern", "State", "Description", "RoleArn", "EventBusName")))' \
+              "$PREVIOUS_SCHEDULE_PATH" > "$PREVIOUS_SCHEDULE_PATH.tmp"
+            mv "$PREVIOUS_SCHEDULE_PATH.tmp" "$PREVIOUS_SCHEDULE_PATH"
+            aws events list-targets-by-rule --rule "$RULE_NAME" --region "$AWS_REGION" --output json \
+              | jq '.Targets // []' > "$PREVIOUS_SCHEDULE_TARGETS_PATH"
+          else
+            echo "false" > "$PREVIOUS_SCHEDULE_EXISTS_PATH"
+            printf '[]\n' > "$PREVIOUS_SCHEDULE_TARGETS_PATH"
+            printf '{}\n' > "$PREVIOUS_SCHEDULE_PATH"
+          fi
+
+          aws lambda get-policy --function-name "$FUNCTION_NAME" --region "$AWS_REGION" --output json \
+            | jq -r '.Policy' | jq '[.Statement[]?.Sid]' > "$PREVIOUS_LAMBDA_POLICY_SIDS_PATH"
 
           code_url="$(aws lambda get-function             --function-name "$FUNCTION_NAME"             --query 'Code.Location'             --output text)"
 
@@ -256,6 +313,7 @@ jobs:
             echo "- Previous CodeSha256: $PREVIOUS_CODE_SHA"
             echo "- Previous LastModified: $PREVIOUS_LAST_MODIFIED"
             echo "- Previous runtime: $PREVIOUS_RUNTIME"
+            echo "- API Gateway integrations, CORS, Lambda environment and EventBridge settlement schedule captured for rollback without publishing values"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy verified package and publish immutable version
@@ -294,6 +352,22 @@ jobs:
             echo "::error::Lambda runtime $DEPLOYED_RUNTIME does not match target $LAMBDA_RUNTIME."
             exit 1
           fi
+
+          environment="$(jq -c '.Environment.Variables + {AGENT_EXCHANGE_PAYOUT_SECRET_ID: "pdao/agent-exchange/payout-signer", AGENT_EXCHANGE_PAYOUT_BATCH_LIMIT: "20"} | {Variables: .}' <<< "$deployed")"
+          aws lambda update-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --runtime "$LAMBDA_RUNTIME" \
+            --environment "$environment" \
+            --revision-id "$CODE_REVISION" >/dev/null
+          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
+          deployed="$(aws lambda get-function-configuration --function-name "$FUNCTION_NAME" --output json)"
+          DEPLOYED_RUNTIME="$(jq -r '.Runtime' <<< "$deployed")"
+          DEPLOYED_REVISION="$(jq -r '.RevisionId' <<< "$deployed")"
+          if [ "$(jq -r '.CodeSha256' <<< "$deployed")" != "$LOCAL_CODE_SHA" ] || [ "$DEPLOYED_RUNTIME" != "$LAMBDA_RUNTIME" ]; then
+            echo "::error::Lambda code or runtime changed while reconciling production configuration."
+            exit 1
+          fi
+          jq -e '.Environment.Variables.AGENT_EXCHANGE_PAYOUT_SECRET_ID == "pdao/agent-exchange/payout-signer" and .Environment.Variables.AGENT_EXCHANGE_PAYOUT_BATCH_LIMIT == "20"' <<< "$deployed" >/dev/null
 
           VERSION="$(aws lambda publish-version             --function-name "$FUNCTION_NAME"             --description "github:$DEPLOY_SHA"             --query 'Version'             --output text)"
 
@@ -380,37 +454,9 @@ jobs:
 
           echo "API Gateway $API_ID routed to immutable Lambda version $DEPLOYED_VERSION"
 
-      - name: Reconcile API Gateway route authorization
-        id: route_auth
-        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-
-          DOMAIN="${PUBLIC_BASE_URL#https://}"
-          DOMAIN="${DOMAIN%%/*}"
-          API_ID="$(aws apigatewayv2 get-api-mappings \
-            --domain-name "$DOMAIN" \
-            --region "$AWS_REGION" \
-            --query 'Items[0].ApiId' \
-            --output text)"
-          test -n "$API_ID" && test "$API_ID" != "None"
-
-          routes="$(aws apigatewayv2 get-routes --api-id "$API_ID" --region "$AWS_REGION" --output json)"
-          while IFS= read -r route_id; do
-            test -n "$route_id" || continue
-            aws apigatewayv2 update-route \
-              --api-id "$API_ID" \
-              --route-id "$route_id" \
-              --authorization-type NONE \
-              --region "$AWS_REGION" >/dev/null
-          done < <(jq -r '.Items[] | select(.AuthorizationType != "NONE") | .RouteId' <<< "$routes")
-
-          echo "API Gateway routes are public at the transport layer; application routes enforce authorization."
-
       - name: Reconcile API Gateway CORS for browser checkout
         id: cors
-        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success' && steps.route_auth.outcome == 'success'
+        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
         run: |
           set -euo pipefail
 
@@ -454,7 +500,7 @@ jobs:
         if: >-
           steps.deploy_code.outcome == 'success' &&
           steps.route_api.outcome == 'success' &&
-          steps.route_auth.outcome == 'success'
+          steps.cors.outcome == 'success'
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -508,26 +554,9 @@ jobs:
 
           echo "Production smoke gate passed, including MongoDB accounts, seller-tier policy, operational PrivatePAY checkout status, canonical x402 requirements, and browser CORS."
 
-      - name: Reconcile payout runtime configuration
-        id: payout_runtime
-        if: steps.deploy_code.outcome == 'success'
-        run: |
-          set -euo pipefail
-
-          config="$(aws lambda get-function-configuration --function-name "$FUNCTION_NAME" --output json)"
-          revision="$(jq -r '.RevisionId' <<< "$config")"
-          environment="$(jq -c '.Environment.Variables + {AGENT_EXCHANGE_PAYOUT_SECRET_ID: "pdao/agent-exchange/payout-signer", AGENT_EXCHANGE_PAYOUT_BATCH_LIMIT: "20"} | {Variables: .}' <<< "$config")"
-
-          aws lambda update-function-configuration \
-            --function-name "$FUNCTION_NAME" \
-            --revision-id "$revision" \
-            --environment "$environment" >/dev/null
-          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
-          echo "Payout runtime configuration reconciled."
-
       - name: Verify live Agent Exchange contract
         id: live_surface
-        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success' && steps.route_auth.outcome == 'success'
+        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success'
         continue-on-error: true
         env:
           AGENT_EXCHANGE_PUBLIC_BASE_URL: ${{ env.SMOKE_BASE_URL }}
@@ -537,7 +566,7 @@ jobs:
 
       - name: Reconcile scheduled seller settlement trigger
         id: settlement_schedule
-        if: steps.deploy_code.outcome == 'success'
+        if: steps.deploy_code.outcome == 'success' && steps.route_api.outcome == 'success' && steps.cors.outcome == 'success' && steps.smoke.outcome == 'success' && steps.live_surface.outcome == 'success'
         run: |
           set -euo pipefail
 
@@ -570,10 +599,8 @@ jobs:
           (
             steps.deploy_code.outcome == 'failure' ||
             steps.route_api.outcome == 'failure' ||
-            steps.route_auth.outcome == 'failure' ||
             steps.cors.outcome == 'failure' ||
             steps.smoke.outcome == 'failure' ||
-            steps.payout_runtime.outcome == 'failure' ||
             steps.live_surface.outcome == 'failure' ||
             steps.settlement_schedule.outcome == 'failure'
           )
@@ -603,6 +630,7 @@ jobs:
           aws lambda update-function-configuration \
             --function-name "$FUNCTION_NAME" \
             --runtime "$PREVIOUS_RUNTIME" \
+            --environment "file://$PREVIOUS_ENVIRONMENT_PATH" \
             --revision-id "$RESTORED_REVISION" >/dev/null
           aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
           RESTORED_RUNTIME="$(aws lambda get-function-configuration \
@@ -614,34 +642,67 @@ jobs:
             exit 1
           fi
 
-          DOMAIN="${PUBLIC_BASE_URL#https://}"
-          DOMAIN="${DOMAIN%%/*}"
-          API_ID="$(aws apigatewayv2 get-api-mappings \
-            --domain-name "$DOMAIN" \
-            --region "$AWS_REGION" \
-            --query 'Items[0].ApiId' \
-            --output text)"
+          API_ID="$(cat "$API_ID_PATH")"
           test -n "$API_ID" && test "$API_ID" != "None"
-          RESTORED_FUNCTION_ARN="$(aws lambda get-function \
-            --function-name "$FUNCTION_NAME" \
-            --region "$AWS_REGION" \
-            --query 'Configuration.FunctionArn' \
-            --output text)"
-          RESTORED_INTEGRATION_URI="arn:aws:apigateway:${AWS_REGION}:lambda:path/2015-03-31/functions/${RESTORED_FUNCTION_ARN}/invocations"
-          for INTEGRATION_ID in $(aws apigatewayv2 get-integrations \
-            --api-id "$API_ID" \
-            --region "$AWS_REGION" \
-            --query 'Items[].IntegrationId' \
-            --output text); do
+          while IFS=$'\t' read -r integration_id integration_uri payload_format timeout_ms; do
+            test -n "$integration_id" || continue
             aws apigatewayv2 update-integration \
               --api-id "$API_ID" \
-              --integration-id "$INTEGRATION_ID" \
+              --integration-id "$integration_id" \
               --region "$AWS_REGION" \
-              --integration-uri "$RESTORED_INTEGRATION_URI" \
-              --payload-format-version 2.0 \
-              --timeout-in-millis 30000 >/dev/null
-          done
-          echo "API Gateway routing restored to the rollback Lambda package."
+              --integration-uri "$integration_uri" \
+              --payload-format-version "$payload_format" \
+              --timeout-in-millis "$timeout_ms" >/dev/null
+          done < <(jq -r '.Items[] | [.IntegrationId, .IntegrationUri, .PayloadFormatVersion, .TimeoutInMillis] | @tsv' "$PREVIOUS_INTEGRATIONS_PATH")
+          aws apigatewayv2 update-api \
+            --api-id "$API_ID" \
+            --region "$AWS_REGION" \
+            --cors-configuration "file://$PREVIOUS_CORS_PATH" >/dev/null
+          echo "API Gateway routing and CORS restored to their captured pre-deploy settings."
+
+          RULE_NAME="PrivateDAOAgentExchangeSettlementSchedule"
+          if [ "$(cat "$PREVIOUS_SCHEDULE_EXISTS_PATH")" = "true" ]; then
+            jq '.State = "DISABLED"' "$PREVIOUS_SCHEDULE_PATH" > "$RUNNER_TEMP/agent-exchange-schedule-disabled.json"
+            aws events put-rule --region "$AWS_REGION" \
+              --cli-input-json "file://$RUNNER_TEMP/agent-exchange-schedule-disabled.json" >/dev/null
+          fi
+
+          mapfile -t CURRENT_TARGET_IDS < <(aws events list-targets-by-rule \
+            --rule "$RULE_NAME" --region "$AWS_REGION" --query 'Targets[].Id' --output text | tr '\t' '\n')
+          if [ "${#CURRENT_TARGET_IDS[@]}" -gt 0 ] && [ -n "${CURRENT_TARGET_IDS[0]}" ]; then
+            aws events remove-targets --rule "$RULE_NAME" --region "$AWS_REGION" \
+              --ids "${CURRENT_TARGET_IDS[@]}" >/dev/null
+          fi
+
+          if [ "$(cat "$PREVIOUS_SCHEDULE_EXISTS_PATH")" = "true" ]; then
+            if [ "$(jq 'length' "$PREVIOUS_SCHEDULE_TARGETS_PATH")" -gt 0 ]; then
+              jq -n --arg rule "$RULE_NAME" --slurpfile targets "$PREVIOUS_SCHEDULE_TARGETS_PATH" \
+                '{Rule:$rule,Targets:$targets[0]}' > "$RUNNER_TEMP/agent-exchange-schedule-targets-restore.json"
+              target_restore="$(aws events put-targets --region "$AWS_REGION" \
+                --cli-input-json "file://$RUNNER_TEMP/agent-exchange-schedule-targets-restore.json")"
+              jq -e '.FailedEntryCount == 0' <<< "$target_restore" >/dev/null
+            fi
+            aws events put-rule --region "$AWS_REGION" \
+              --cli-input-json "file://$PREVIOUS_SCHEDULE_PATH" >/dev/null
+          elif aws events describe-rule --name "$RULE_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            aws events delete-rule --name "$RULE_NAME" --region "$AWS_REGION" >/dev/null
+          fi
+          echo "EventBridge settlement rule and targets restored to their captured pre-deploy state."
+
+          PREVIOUS_POLICY_SIDS="$(cat "$PREVIOUS_LAMBDA_POLICY_SIDS_PATH")"
+          if ! jq -e 'index("agent-exchange-api-unqualified-rollback") != null' <<< "$PREVIOUS_POLICY_SIDS" >/dev/null; then
+            aws lambda remove-permission --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+              --statement-id "agent-exchange-api-unqualified-rollback" >/dev/null 2>&1 || true
+          fi
+          if ! jq -e 'index("agent-exchange-settlement-schedule") != null' <<< "$PREVIOUS_POLICY_SIDS" >/dev/null; then
+            aws lambda remove-permission --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+              --statement-id "agent-exchange-settlement-schedule" >/dev/null 2>&1 || true
+          fi
+          if [ -n "${DEPLOYED_VERSION:-}" ]; then
+            aws lambda remove-permission --function-name "$FUNCTION_NAME" --region "$AWS_REGION" \
+              --qualifier "$DEPLOYED_VERSION" \
+              --statement-id "agent-exchange-api-${DEPLOYED_VERSION}" >/dev/null 2>&1 || true
+          fi
 
           for attempt in $(seq 1 12); do
             if curl --fail --silent --show-error               --connect-timeout 10 --max-time 30               "$SMOKE_BASE_URL/api/health" >/tmp/rollback-health.json &&
@@ -660,6 +721,7 @@ jobs:
             echo "### Automatic rollback"
             echo "- Restored CodeSha256: $RESTORED_CODE_SHA"
             echo "- Restored Lambda runtime: $RESTORED_RUNTIME"
+            echo "- Restored EventBridge settlement schedule and Lambda invoke permissions."
             echo "- Reason: deployment verification or production smoke gate failed."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -669,10 +731,8 @@ jobs:
           (
             steps.deploy_code.outcome == 'failure' ||
             steps.route_api.outcome == 'failure' ||
-            steps.route_auth.outcome == 'failure' ||
             steps.cors.outcome == 'failure' ||
             steps.smoke.outcome == 'failure' ||
-            steps.payout_runtime.outcome == 'failure' ||
             steps.live_surface.outcome == 'failure' ||
             steps.settlement_schedule.outcome == 'failure'
           )
@@ -688,10 +748,8 @@ jobs:
         if: >-
           steps.deploy_code.outcome == 'success' &&
           steps.route_api.outcome == 'success' &&
-          steps.route_auth.outcome == 'success' &&
           steps.cors.outcome == 'success' &&
           steps.smoke.outcome == 'success' &&
-          steps.payout_runtime.outcome == 'success' &&
           steps.live_surface.outcome == 'success' &&
           steps.settlement_schedule.outcome == 'success'
         run: |

@@ -6,7 +6,7 @@ import { MemoryStore } from "../src/storage.mjs";
 import { calculatePdaoBenefit, consumePdaoBenefit, createPdaoChallengeMessage, issuePdaoChallenge, pdaoTierForValue, publicPdaoBenefitPolicy, runPdaoHolderBalanceSnapshots, verifyPdaoHolderAccess } from "../src/pdao-entitlement.mjs";
 
 const config = {
-  domain: "agents.privatedao.org",
+  domain: "agent.pdaowallet.com",
   pdaoMint: "9isGuumtaqvJeJeyLF44fvfskk2cv5mYsopexMBfpump",
   marketDataUrl: "https://market.invalid",
   cluster: "mainnet-beta",
@@ -137,7 +137,7 @@ test("historical holder qualification fails closed before seven days of snapshot
 });
 
 test("holder challenge message binds service and input hash", () => {
-  const message = createPdaoChallengeMessage({ domain: "agents.privatedao.org", wallet: "11111111111111111111111111111111", serviceId: "wallet.intelligence", inputHash: "hash", nonce: "nonce", expiresAt: "2026-10-11T00:00:00.000Z" });
+  const message = createPdaoChallengeMessage({ domain: "agent.pdaowallet.com", wallet: "11111111111111111111111111111111", serviceId: "wallet.intelligence", inputHash: "hash", nonce: "nonce", expiresAt: "2026-10-11T00:00:00.000Z" });
   assert.match(message, /purpose: pdao-token-holder-monthly-access/);
   assert.match(message, /service_id: wallet\.intelligence/);
   assert.match(message, /input_hash: hash/);

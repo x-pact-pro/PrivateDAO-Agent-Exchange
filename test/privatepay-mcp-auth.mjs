@@ -13,7 +13,7 @@ async function request(path, method, body = undefined) {
     routeKey: method + " " + path,
     rawPath: path,
     rawQueryString: "",
-    headers: { "content-type": "application/json", host: "agents.privatedao.org" },
+    headers: { "content-type": "application/json", host: "agent.pdaowallet.com" },
     requestContext: {
       stage: "$default",
       requestId: "privatepay-mcp-unit",
@@ -76,7 +76,7 @@ test("dedicated PrivatePAY MCP forbids general tools and refuses unsigned privat
 test("dedicated PrivatePAY MCP publishes machine-readable onboarding instructions", async () => {
   const metadata = await request("/mcp/privatepay", "GET");
   assert.equal(metadata.status, 200);
-  assert.equal(metadata.body.endpoint, "https://agents.privatedao.org/mcp/privatepay");
+  assert.equal(metadata.body.endpoint, "https://agent.pdaowallet.com/mcp/privatepay");
   assert.match(metadata.body.authentication, /wallet-signed/);
   assert.match(metadata.body.payment_authorization, /separate signed wallet transaction/);
 });

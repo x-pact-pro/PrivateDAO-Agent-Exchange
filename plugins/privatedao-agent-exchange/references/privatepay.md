@@ -4,7 +4,7 @@
 
 PrivatePAY x402 is listed as a live Agent Exchange service at:
 
-`https://agents.privatedao.org/services/privatepay-x402`
+`https://agent.pdaowallet.com/services/privatepay-x402`
 
 The current service surface identifies the route as Mainnet Live, x402, and Solana Mainnet. It documents MagicBlock private rollup settlement, a request commitment, and settlement status. Use the live service page as the product reference when explaining the payment flow.
 
@@ -16,4 +16,4 @@ The public-facing promise is controlled privacy and verifiable completion, not u
 
 The Agent Exchange MCP surface is:
 
-`https://agents.privatedao.org/mcp`
+`https://agent.pdaowallet.com/mcp`

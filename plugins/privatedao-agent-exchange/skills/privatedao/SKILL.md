@@ -5,7 +5,7 @@ description: Use PrivateDAO Agent Exchange for commercial verification, intellig
 
 # PrivateDAO Agent Exchange
 
-Use the live MCP endpoint at `https://agents.privatedao.org/mcp`.
+Use the live MCP endpoint at `https://agent.pdaowallet.com/mcp`.
 
 ## Product context
 
@@ -13,9 +13,9 @@ Use the live MCP endpoint at `https://agents.privatedao.org/mcp`.
 - Thesis: `https://privatedao.org/thesis/`
 - Official token surface: `https://privatedao.org/token/`
 - Token symbol: `$PDAO`
-- Agent Exchange: `https://agents.privatedao.org/`
+- Agent Exchange: `https://agent.pdaowallet.com/`
 - PrivatePAY x402: `https://privatedao.org/privatepay`
-- Agent Exchange PrivatePAY service: `https://agents.privatedao.org/services/privatepay-x402`
+- Agent Exchange PrivatePAY service: `https://agent.pdaowallet.com/services/privatepay-x402`
 
 ## Content and brand work
 
