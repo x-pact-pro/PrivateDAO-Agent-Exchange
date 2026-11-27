@@ -358,7 +358,7 @@ jobs:
             --function-name "$FUNCTION_NAME" \
             --runtime "$LAMBDA_RUNTIME" \
             --environment "$environment" \
-            --revision-id "$CODE_REVISION" >/dev/null
+            --revision-id "$DEPLOYED_REVISION" >/dev/null
           aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
           deployed="$(aws lambda get-function-configuration --function-name "$FUNCTION_NAME" --output json)"
           DEPLOYED_RUNTIME="$(jq -r '.Runtime' <<< "$deployed")"

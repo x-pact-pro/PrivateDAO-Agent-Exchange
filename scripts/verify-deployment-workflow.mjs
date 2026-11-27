@@ -82,5 +82,10 @@ const publishVersion = workflow.indexOf("aws lambda publish-version");
 if (environmentUpdate < 0 || publishVersion < 0 || environmentUpdate > publishVersion) {
   throw new Error("payout/runtime configuration must be reconciled before publishing the immutable Lambda version");
 }
+const environmentUpdateBlock = workflow.slice(environmentUpdate, publishVersion);
+if (!environmentUpdateBlock.includes('--revision-id "$DEPLOYED_REVISION"')
+  || environmentUpdateBlock.includes('--revision-id "$CODE_REVISION"')) {
+  throw new Error("the payout environment update must use the refreshed Lambda revision after the runtime update");
+}
 
 console.log(`Deployment workflow verification: PASS (${requiredFragments.length} release and rollback guards; Node.js 24.10.0; Virginia only)`);
