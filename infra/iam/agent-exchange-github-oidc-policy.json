@@ -1,0 +1,64 @@
+{
+  "RoleName": "PrivateDAOAgentExchange-GitHubOIDCDeploy",
+  "PolicyName": "AgentExchangeLambdaDeploy",
+  "PolicyDocument": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "DeployOnlyVirginiaLambda",
+        "Effect": "Allow",
+        "Action": [
+          "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
+          "lambda:UpdateFunctionCode",
+          "lambda:PublishVersion"
+        ],
+        "Resource": "arn:aws:lambda:us-east-1:535182441609:function:PrivateDAOAgentExchange-Virginia-Standby"
+      },
+      {
+        "Sid": "ManageVirginiaSettlementSchedule",
+        "Effect": "Allow",
+        "Action": [
+          "events:DeleteRule",
+          "events:DescribeRule",
+          "events:ListTargetsByRule",
+          "events:PutRule",
+          "events:PutTargets",
+          "events:RemoveTargets"
+        ],
+        "Resource": "arn:aws:events:us-east-1:535182441609:rule/PrivateDAOAgentExchangeSettlementSchedule"
+      },
+      {
+        "Sid": "ConfigureVirginiaSettlementLambda",
+        "Effect": "Allow",
+        "Action": [
+          "lambda:AddPermission",
+          "lambda:GetPolicy",
+          "lambda:RemovePermission",
+          "lambda:UpdateFunctionConfiguration"
+        ],
+        "Resource": [
+          "arn:aws:lambda:us-east-1:535182441609:function:PrivateDAOAgentExchange-Virginia-Standby",
+          "arn:aws:lambda:us-east-1:535182441609:function:PrivateDAOAgentExchange-Virginia-Standby:*"
+        ]
+      },
+      {
+        "Sid": "RouteVirginiaAgentExchangeApi",
+        "Effect": "Allow",
+        "Action": [
+          "apigateway:GET",
+          "apigateway:PATCH"
+        ],
+        "Resource": [
+          "arn:aws:apigateway:us-east-1::/apis/waljabkv3a",
+          "arn:aws:apigateway:us-east-1::/apis/waljabkv3a/integrations",
+          "arn:aws:apigateway:us-east-1::/apis/waljabkv3a/integrations/*",
+          "arn:aws:apigateway:us-east-1::/apis/waljabkv3a/routes",
+          "arn:aws:apigateway:us-east-1::/apis/waljabkv3a/routes/*",
+          "arn:aws:apigateway:us-east-1::/domainnames/agent.pdaowallet.com/apimappings",
+          "arn:aws:apigateway:us-east-1::/domainnames/agents.privatedao.org/apimappings"
+        ]
+      }
+    ]
+  }
+}

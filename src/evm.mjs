@@ -4,6 +4,12 @@ const EVM_NETWORKS = Object.freeze({
   "ethereum-mainnet": { chainId: "0x1", label: "Ethereum Mainnet", alchemySlug: "eth-mainnet", env: "PDAO_EVM_ETHEREUM_MAINNET_RPC_URL" },
   "base-mainnet": { chainId: "0x2105", label: "Base Mainnet", alchemySlug: "base-mainnet", env: "PDAO_EVM_BASE_MAINNET_RPC_URL" },
   "arbitrum-mainnet": { chainId: "0xa4b1", label: "Arbitrum One", alchemySlug: "arb-mainnet", env: "PDAO_EVM_ARBITRUM_MAINNET_RPC_URL" },
+  "robinhood-mainnet": {
+    chainId: "0x1237",
+    label: "Robinhood Chain Mainnet",
+    env: "PDAO_EVM_ROBINHOOD_MAINNET_RPC_URL",
+    defaultRpcUrl: "https://rpc.mainnet.chain.robinhood.com",
+  },
 });
 
 const hexAddress = /^0x[0-9a-fA-F]{40}$/;
@@ -28,6 +34,7 @@ const EVM_CHAIN_IDS = Object.freeze({
   "ethereum-mainnet": "1",
   "base-mainnet": "8453",
   "arbitrum-mainnet": "42161",
+  "robinhood-mainnet": "4663",
 });
 
 function retryableError(message, retryable = false) {
@@ -58,7 +65,8 @@ export function evmRpcUrl(config, network) {
   if (!definition) throw new Error(`unsupported EVM network: ${network}`);
   const explicit = config.evmRpcUrls?.[normalizedNetwork];
   if (explicit) return explicit;
-  if (config.alchemyApiKey) return `https://${definition.alchemySlug}.g.alchemy.com/v2/${config.alchemyApiKey}`;
+  if (definition.defaultRpcUrl) return definition.defaultRpcUrl;
+  if (config.alchemyApiKey && definition.alchemySlug) return `https://${definition.alchemySlug}.g.alchemy.com/v2/${config.alchemyApiKey}`;
   throw new Error(`RPC is not configured for ${network}`);
 }
 

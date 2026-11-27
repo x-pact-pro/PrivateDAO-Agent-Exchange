@@ -26,6 +26,12 @@ export const NETWORK_CAPABILITIES = Object.freeze([
     capabilities: ["service-discovery", "read-only-intelligence", "transaction-simulation"],
   },
   {
+    id: "robinhood:mainnet",
+    label: "Robinhood Chain Mainnet",
+    status: "mainnet-read-only",
+    capabilities: ["service-discovery", "read-only-intelligence", "transaction-simulation"],
+  },
+  {
     id: "hyperliquid:hyperevm-mainnet",
     label: "HyperEVM Mainnet",
     status: "discovery-only",
@@ -92,6 +98,9 @@ const NETWORK_ALIASES = Object.freeze({
   arbitrum: "arbitrum-mainnet",
   "arbitrum-mainnet": "arbitrum-mainnet",
   "arbitrum:mainnet": "arbitrum-mainnet",
+  robinhood: "robinhood-mainnet",
+  "robinhood-mainnet": "robinhood-mainnet",
+  "robinhood:mainnet": "robinhood-mainnet",
   "hyperliquid:hyperevm-mainnet": "hyperliquid:hyperevm-mainnet",
   "tempo:mainnet": "tempo:mainnet",
   "ethereum:sepolia": "ethereum:sepolia",

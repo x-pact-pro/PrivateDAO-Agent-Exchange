@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-const base = String(process.env.AGENT_EXCHANGE_PUBLIC_BASE_URL || "https://agents.privatedao.org").replace(/\/$/, "");
+const base = String(process.env.AGENT_EXCHANGE_PUBLIC_BASE_URL || "https://agent.pdaowallet.com").replace(/\/$/, "");
 
 async function read(path) {
   let lastError;

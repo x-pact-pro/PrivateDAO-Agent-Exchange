@@ -7,21 +7,26 @@ import { requestPrivatePayWalletChallenge, readAuthenticatedPrivatePayBalance } 
 const wallet = new PublicKey(new Uint8Array(32).fill(9)).toBase58();
 const other = new PublicKey(new Uint8Array(32).fill(8)).toBase58();
 const mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-const cfg = { privatePayProviderUrl: "https://payments.example", privatePayConfidentialMint: mint, privatePayCluster: "mainnet-beta" };
+const cfg = {
+  privatePayProviderUrl: "https://payments.example",
+  privatePayConfidentialMint: mint,
+  privatePayCluster: "mainnet-beta",
+  privatePayPrivacyRail: "magicblock-private-ephemeral-rollup",
+};
 const signature = Buffer.alloc(64, 1).toString("base64");
 function reply(status, body) {
   return { status, ok: status >= 200 && status < 300, async json() { return body; } };
 }
 
-test("MagicBlock challenge is wallet-bound, read-only and Mainnet only", async () => {
+test("MagicBlock challenge is wallet-bound, read-only and Mainnet Private only", async () => {
   const challenge = await requestPrivatePayWalletChallenge(cfg, wallet, async (url) => {
     assert.equal(url.pathname, "/v1/spl/challenge");
     assert.equal(url.searchParams.get("pubkey"), wallet);
-    assert.equal(url.searchParams.get("cluster"), "mainnet");
+    assert.equal(url.searchParams.get("cluster"), "mainnet-private");
     return reply(200, { challenge: "nonce-123", message: "Sign challenge nonce-123", expiresAt: "2026-11-11T03:00:00Z" });
   });
   assert.deepEqual({ wallet: challenge.wallet, cluster: challenge.cluster, challenge: challenge.challenge, message: challenge.message, authorization_purpose: challenge.authorization_purpose }, {
-    wallet, cluster: "mainnet", challenge: "nonce-123", message: "Sign challenge nonce-123", authorization_purpose: "read_shielded_balance",
+    wallet, cluster: "mainnet-private", challenge: "nonce-123", message: "Sign challenge nonce-123", authorization_purpose: "read_shielded_balance",
   });
   assert.equal(challenge.payment_requires_separate_transaction_signature, true);
   assert.equal("read_only" in challenge, false);
@@ -33,14 +38,14 @@ test("wallet signing authorizes exact shielded USDC read and hides bearer token"
     calls.push({ url: String(url), init });
     if (String(url).endsWith("/v1/spl/login")) {
       const body = JSON.parse(init.body);
-      assert.deepEqual(body, { pubkey: wallet, challenge: "nonce-123", signature, cluster: "mainnet" });
+      assert.deepEqual(body, { pubkey: wallet, challenge: "nonce-123", signature, cluster: "mainnet-private" });
       return reply(200, { token: "private-bearer-fixture", expiresAt: "2026-11-11T03:00:00Z" });
     }
     const parsed = new URL(url);
     assert.equal(parsed.pathname, "/v1/spl/private-balance");
     assert.equal(parsed.searchParams.get("address"), wallet);
     assert.equal(parsed.searchParams.get("mint"), mint);
-    assert.equal(parsed.searchParams.get("cluster"), "mainnet");
+    assert.equal(parsed.searchParams.get("cluster"), "mainnet-private");
     assert.equal(init.headers.authorization, "Bearer private-bearer-fixture");
     return reply(200, { address: wallet, mint, location: "ephemeral", balance: "1000000" });
   });

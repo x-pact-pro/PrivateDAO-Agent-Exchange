@@ -6,6 +6,7 @@ import {
   networkCapability,
   normalizeNetworkId,
 } from "../src/network-capabilities.mjs";
+import { SERVICES } from "../src/catalog.mjs";
 
 test("product execution networks stay out of Agent Exchange metadata", () => {
   const excluded = ["bnb:testnet", "zcash:testnet", "stellar:testnet"];
@@ -18,4 +19,14 @@ test("product execution networks stay out of Agent Exchange metadata", () => {
   }
 
   assert.ok(networkCapability("solana"), "Solana Agent Exchange support must remain available");
+  assert.equal(normalizeNetworkId("robinhood"), "robinhood-mainnet");
+  assert.equal(networkCapability("robinhood:mainnet")?.status, "mainnet-read-only");
+  assert.ok(networkCapability("robinhood:mainnet")?.capabilities.includes("transaction-simulation"));
+
+  const robinhoodServices = new Set(SERVICES.filter((service) => service.supportedNetworks?.includes("robinhood-mainnet")).map((service) => service.id));
+  assert.ok(robinhoodServices.has("token.intelligence"));
+  assert.ok(robinhoodServices.has("transaction.simulate"));
+  assert.equal(robinhoodServices.has("market.snapshot"), false);
+  assert.equal(robinhoodServices.has("swap.quote"), false);
+  assert.equal(robinhoodServices.has("privatepay.x402"), false);
 });

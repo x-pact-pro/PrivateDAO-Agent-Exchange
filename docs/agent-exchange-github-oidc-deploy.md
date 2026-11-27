@@ -19,18 +19,21 @@ private keys, or other runtime secrets to the repository or workflow.
 The production Lambda keeps using its existing Lambda environment and AWS
 Secrets Manager references. Deploying code does not rewrite those values.
 
-Optional repository variables:
+Required production environment variables:
 
-- `AGENT_EXCHANGE_AWS_REGION` — defaults to `eu-north-1`.
-- `AGENT_EXCHANGE_FUNCTION_NAME` — defaults to
-  `PrivateDAOAgentExchange-Function-N2zgpQmMN41S`.
-- `AGENT_EXCHANGE_PUBLIC_BASE_URL` — defaults to
-  `https://agents.privatedao.org`.
+- `AGENT_EXCHANGE_AWS_REGION=us-east-1`
+- `AGENT_EXCHANGE_FUNCTION_NAME=PrivateDAOAgentExchange-Virginia-Standby`
+- `AGENT_EXCHANGE_PUBLIC_BASE_URL=https://agents.privatedao.org`
+- `AGENT_EXCHANGE_AWS_ROLE_ARN=arn:aws:iam::535182441609:role/PrivateDAOAgentExchange-GitHubOIDCDeploy`
 
-The workflow uses the GitHub environment `agent-exchange-production`. Keep that
-environment deployment-only. A manual approval rule can be added later if
-desired; without an environment approval rule the deployment remains automatic
-after the required checks pass.
+`agent.pdaowallet.com` is also mapped to the same Virginia API
+(`waljabkv3a`). The workflow verifies the chosen hostname maps to the Virginia
+API and fails closed for Stockholm, unknown Lambda names, or unverified
+hostnames.
+
+Pushes to `main` deploy automatically only after the `Agent Exchange` workflow
+passes for the same commit. A manual dispatch requires the exact production
+phrase. The production environment currently has no reviewer gate.
 
 ## AWS IAM OIDC trust
 
@@ -39,8 +42,8 @@ Create the GitHub OIDC provider in the AWS account if it does not already exist:
 - Provider: `https://token.actions.githubusercontent.com`
 - Audience: `sts.amazonaws.com`
 
-The deployment role should trust only this repository and production
-environment. Replace `<AWS_ACCOUNT_ID>` and the role name with the real values.
+The production role trusts only this repository and the
+`agent-exchange-production` environment.
 
 ```json
 {
@@ -49,13 +52,13 @@ environment. Replace `<AWS_ACCOUNT_ID>` and the role name with the real values.
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::<AWS_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+        "Federated": "arn:aws:iam::535182441609:oidc-provider/token.actions.githubusercontent.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:x-pact-pro/PrivateDAO:environment:agent-exchange-production"
+          "token.actions.githubusercontent.com:sub": "repo:x-pact-pro@264253633/PrivateDAO-Agent-Exchange@1442527439:environment:agent-exchange-production"
         }
       }
     }
@@ -65,51 +68,19 @@ environment. Replace `<AWS_ACCOUNT_ID>` and the role name with the real values.
 
 ## Least-privilege Lambda policy
 
-Attach a policy scoped to the Agent Exchange function. Replace
-`<AWS_ACCOUNT_ID>` if needed.
+The live inline policy is recorded in
+[`../infra/iam/agent-exchange-github-oidc-policy.json`](../infra/iam/agent-exchange-github-oidc-policy.json).
+It is restricted to the Virginia Lambda, settlement schedule, API, and both
+Virginia custom-domain mappings. No Stockholm resources are included.
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "DeployAgentExchangeCodeOnly",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:GetFunction",
-        "lambda:GetFunctionConfiguration",
-        "lambda:UpdateFunctionCode",
-        "lambda:PublishVersion"
-      ],
-      "Resource": "arn:aws:lambda:eu-north-1:<AWS_ACCOUNT_ID>:function:PrivateDAOAgentExchange-Function-N2zgpQmMN41S"
-    }
-  ]
-}
-```
+The role can update the Lambda configuration because the release reconciles
+the existing payout secret reference and bounded batch size. It cannot read
+Secrets Manager values, write DynamoDB data, administer IAM, or deploy to
+Stockholm.
 
-The workflow also calls `sts:GetCallerIdentity`, which does not require an
-identity policy permission.
-
-The browser checkout also requires the role to reconcile the HTTP API CORS
-configuration during deployment. Add this narrowly scoped statement for the
-production API only:
-
-```json
-{
-  "Sid": "ReconcileAgentExchangeBrowserCors",
-  "Effect": "Allow",
-  "Action": "apigateway:PATCH",
-  "Resource": "arn:aws:apigateway:eu-north-1::/apis/<API_ID>"
-}
-```
-
-`<API_ID>` is the HTTP API mapped to `agents.privatedao.org`. The deployment
-workflow resolves it from the custom-domain mapping and fails closed if CORS
-cannot be reconciled. It also rolls back the Lambda code when that step fails.
-
-Do not grant this role Lambda configuration writes, IAM administration,
-Secrets Manager reads, DynamoDB writes, or broad `lambda:*` unless a future
-deployment design explicitly requires them.
+AWS-managed Lambda uses runtime identifier `nodejs24.x`; GitHub Actions and
+local builds pin exactly Node.js `24.10.0`. AWS controls the patch version of
+the managed Lambda runtime and applies its runtime updates.
 
 ## Deployment gate
 

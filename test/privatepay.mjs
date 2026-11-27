@@ -192,6 +192,23 @@ test("MagicBlock merchant checkout follows the official payments contract", asyn
   assert.doesNotMatch(JSON.stringify(result), /merchant-api-key-fixture|payer/);
 });
 
+test("MagicBlock merchant checkout rejects the merchant wallet as payer before the provider call", async () => {
+  let providerCalled = false;
+  await assert.rejects(
+    createPrivatePayCheckout(magicBlockCheckoutConfig({ privatePayMerchantId: TEST_PAYER }), {
+      payer: TEST_PAYER,
+      amount_base_units: "1000",
+      resource: "https://agents.example/api/service/verify",
+      external_reference: "job_same_payer_merchant",
+    }, async () => {
+      providerCalled = true;
+      return response(200, { id: TEST_PAYMENT_ID, status: "created" });
+    }),
+    (error) => error.code === "PRIVATEPAY_PAYER_EQUALS_MERCHANT" && error.statusCode === 400,
+  );
+  assert.equal(providerCalled, false);
+});
+
 test("MagicBlock payment-link buyer checkout binds UUIDv4 idempotency to the provider header", async () => {
   const calls = [];
   const idempotencyKey = "550e8400-e29b-41d4-a716-446655440000";
@@ -509,6 +526,54 @@ test("MagicBlock payment binds cluster and settlement mode to the quote", () => 
   payload.paymentPayload.payload = { paymentId: TEST_PAYMENT_ID, transaction: "AQ==" };
   payload.paymentPayload.accepted = { ...accepted, extra: { ...accepted.extra, cluster: "mainnet-beta" } };
   assert.throws(() => assertPrivatePayPaymentPayload(payload), (error) => error.code === "PRIVATEPAY_PAYMENT_MISMATCH");
+});
+
+test("MagicBlock payment binds checkout identity fields and timeout to the original quote", () => {
+  const accepted = {
+    scheme: "exact-magicblock",
+    network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    asset: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    amount: "1000",
+    payTo: "So11111111111111111111111111111111111111112",
+    maxTimeoutSeconds: 300,
+    extra: {
+      request_id: TEST_REQUEST_ID,
+      paymentId: TEST_PAYMENT_ID,
+      payer: TEST_PAYER,
+      merchantId: "So11111111111111111111111111111111111111112",
+      resource: "https://agents.example/api/privatepay",
+      cluster: "mainnet-private",
+      settlement: "ephemeral-rollup",
+      paymentFlow: "upfront",
+      transaction: "AQID",
+    },
+  };
+  const base = {
+    x402Version: 2,
+    paymentPayload: { x402Version: 2, accepted, payload: { paymentId: TEST_PAYMENT_ID, transaction: "AQ==" } },
+    paymentRequirements: accepted,
+  };
+  assert.equal(assertPrivatePayPaymentPayload(base), true);
+
+  for (const [field, value] of [
+    ["paymentId", "d".repeat(64)],
+    ["payer", new PublicKey(new Uint8Array(32).fill(9)).toBase58()],
+    ["merchantId", TEST_PAYER],
+    ["resource", "https://agents.example/api/other"],
+    ["paymentFlow", "deferred"],
+    ["transaction", "BAUG"],
+  ]) {
+    const candidate = structuredClone(base);
+    candidate.paymentRequirements = {
+      ...accepted,
+      extra: { ...accepted.extra, [field]: value },
+    };
+    assert.throws(() => assertPrivatePayPaymentPayload(candidate), (error) => error.code === "PRIVATEPAY_PAYMENT_MISMATCH");
+  }
+
+  const timeoutMismatch = structuredClone(base);
+  timeoutMismatch.paymentRequirements = { ...accepted, maxTimeoutSeconds: 301 };
+  assert.throws(() => assertPrivatePayPaymentPayload(timeoutMismatch), (error) => error.code === "PRIVATEPAY_PAYMENT_MISMATCH");
 });
 
 test("PrivatePAY remains fail-closed when x402 conformance is not verified", async () => {

@@ -22,6 +22,13 @@ assert.ok(serviceList.some((service) => service.id === "agent.research.report"))
 assert.ok(serviceList.some((service) => service.id === "transaction.simulate"));
 assert.deepEqual(serviceList.find((service) => service.id === "verify.basic").supported_target_networks, ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"]);
 assert.deepEqual(serviceList.find((service) => service.id === "github.repository").supported_target_networks, []);
+for (const serviceId of ["token.intelligence", "risk.score", "wallet.intelligence", "wallet.bot.classify", "contract.inspect", "launch.check", "research.asset", "research.wallet", "contract.explain", "transaction.explain", "anomaly.detect", "agent.research.report", "portfolio.intelligence", "transaction.simulate", "forensics.trace"]) {
+  const service = serviceList.find((item) => item.id === serviceId);
+  assert.deepEqual(service.supported_target_networks, ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet", "robinhood-mainnet"], serviceId);
+}
+for (const serviceId of ["market.snapshot", "swap.quote", "privatepay.x402"]) {
+  assert.equal(serviceList.find((service) => service.id === serviceId).supported_target_networks.includes("robinhood-mainnet"), false, serviceId);
+}
 for (const serviceId of ["verify.deep", "decision.context", "receipt.verify", "agent.match", "intelligence.synthesize", "sponsored.discovery"]) {
   const service = serviceList.find((item) => item.id === serviceId);
   assert.deepEqual(service.supported_target_networks, ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"], serviceId);
@@ -33,7 +40,7 @@ for (const path of ["/.well-known/agent-card.json", "/.well-known/mcp.json", "/o
 }
 
 const mcpDiscovery = JSON.parse((await request("/.well-known/mcp.json")).body);
-assert.equal(mcpDiscovery.url, "https://agents.privatedao.org/mcp");
+assert.equal(mcpDiscovery.url, "https://agent.pdaowallet.com/mcp");
 assert.equal(mcpDiscovery.transport, "streamable-http");
 
 const free = await request("/api/jobs", "POST", {

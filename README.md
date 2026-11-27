@@ -15,11 +15,14 @@ quote-first job and x402 surfaces covered by the integration tests in `test/`.
 
 ## Runtime
 
-- Function: `PrivateDAOAgentExchange-Function-N2zgpQmMN41S`
-- Runtime: Node.js 22
+- Function: `PrivateDAOAgentExchange-Virginia-Standby`
+- Runtime: AWS-managed Node.js 24 (`nodejs24.x`, automatic runtime updates);
+  local and CI toolchain pin `24.10.0`
 - Handler: `src/handler.handler`
-- Release: `1.7.6` (source package; production promotion remains gated)
-- Domain: `agents.privatedao.org`
+- Release: `1.7.6` (main is deployed automatically after same-commit CI checks pass)
+- Domains: `agent.pdaowallet.com` and `agents.privatedao.org`, both mapped to
+  the Virginia HTTP API
+- AWS region: `us-east-1` (Virginia)
 - Production execution network: Solana Mainnet
 - Mainnet read-only intelligence: Ethereum Mainnet, Base Mainnet, and Arbitrum One
 - Solana Agent identity: 8004 Agent #1471; this Lambda does not create or replace that identity
@@ -47,7 +50,7 @@ quote-first job and x402 surfaces covered by the integration tests in `test/`.
 
 The public MCP endpoint is a remote Streamable HTTP MCP server:
 
-`https://agents.privatedao.org/mcp`
+`https://agent.pdaowallet.com/mcp`
 
 It supports the standard `initialize`, `ping`, notification, `tools/list`, and
 `tools/call` lifecycle. Tool annotations identify read-only tools separately
@@ -105,7 +108,7 @@ OpenClaw configuration example:
   mcp: {
     servers: {
       privatedao: {
-        url: "https://agents.privatedao.org/mcp",
+        url: "https://agent.pdaowallet.com/mcp",
         transport: "streamable-http",
         toolFilter: {
           include: ["pdao_services", "verify_basic", "job_status", "get_receipt", "search_agents", "agent_match", "network_stats"]

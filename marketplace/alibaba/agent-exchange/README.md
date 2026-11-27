@@ -6,14 +6,14 @@
 
 **Product type:** SaaS with API and MCP access. Recommended access method: Alibaba Cloud Marketplace SPI mode. Alibaba provisions one isolated service instance per order; the instance maps to the existing Agent Exchange entitlement boundary.
 
-**Product URL:** https://agents.privatedao.org
+**Product URL:** https://agent.pdaowallet.com
 
 **API surfaces:**
 
-- OpenAPI: https://agents.privatedao.org/openapi.json
-- MCP: https://agents.privatedao.org/mcp
-- A2A: https://agents.privatedao.org/a2a
-- Marketplace: https://agents.privatedao.org/marketplace
+- OpenAPI: https://agent.pdaowallet.com/openapi.json
+- MCP: https://agent.pdaowallet.com/mcp
+- A2A: https://agent.pdaowallet.com/a2a
+- Marketplace: https://agent.pdaowallet.com/marketplace
 
 **Short description:**
 
@@ -63,11 +63,11 @@ The customer instance is an entitlement record, not a new wallet, signing key, o
 
 ## Evidence and demo
 
-- Live product: https://agents.privatedao.org
-- Live marketplace: https://agents.privatedao.org/marketplace
-- Live read-only demo: https://agents.privatedao.org/demo
-- API specification: https://agents.privatedao.org/openapi.json
-- MCP endpoint: https://agents.privatedao.org/mcp
+- Live product: https://agent.pdaowallet.com
+- Live marketplace: https://agent.pdaowallet.com/marketplace
+- Live read-only demo: https://agent.pdaowallet.com/demo
+- API specification: https://agent.pdaowallet.com/openapi.json
+- MCP endpoint: https://agent.pdaowallet.com/mcp
 
 These are the product's real surfaces. No mock screenshots or placeholder endpoints are included.
 
@@ -75,7 +75,7 @@ These are the product's real surfaces. No mock screenshots or placeholder endpoi
 
 - [ ] Seller identity and Co-Sell agreement verified in Alibaba Seller Portal.
 - [ ] Product category, EULA, support contact, and refund policy approved.
-- [ ] SPI callback URL configured as `https://agents.privatedao.org/api/alibaba/spi`.
+- [ ] SPI callback URL configured as `https://agent.pdaowallet.com/api/alibaba/spi`.
 - [ ] `ALIBABA_MARKETPLACE_ENABLED=true` enabled only after Seller Portal test callbacks pass.
 - [ ] `AGENT_EXCHANGE_ALIBABA_SECRET_ID` points to the secret containing `ALIBABA_MARKETPLACE_SPI_SECRET`.
 - [ ] Create, renew, expire, release, and duplicate callback tests recorded.

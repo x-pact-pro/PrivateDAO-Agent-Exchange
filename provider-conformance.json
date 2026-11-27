@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "critical": true,
+  "nodeMajor": 24,
+  "nodeVersion": "24.10.0",
+  "toolchains": {
+    "rust": {
+      "required": false,
+      "reason": "Agent Exchange contains no Cargo workspace or Rust production source."
+    },
+    "nextjs": {
+      "required": false,
+      "reason": "Agent Exchange is an AWS Lambda Node.js service and has no Next.js application."
+    }
+  },
+  "deploymentPolicy": "Use AWS Lambda and GitHub Actions according to the publishers' documented deployment workflows. MCP is the contract and verification source.",
+  "productionSurfaces": ["lambda", "github-actions"],
+  "providers": [
+    {
+      "id": "aws",
+      "publisher": "Amazon Web Services",
+      "officialMcp": "mcp__awsknowledge",
+      "officialContract": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-nodejs.html"
+    },
+    {
+      "id": "magicblock",
+      "publisher": "MagicBlock",
+      "officialDocs": "https://payments.magicblock.app/doc",
+      "mcpGap": "The available publisher-operated MagicBlock MCP in this session exposes SPL balance reads only; it does not document or verify PrivatePAY checkout, settlement, or deployment operations. Use the publisher's official payments documentation and pinned provider source for those operations.",
+      "officialSource": {
+        "repository": "https://github.com/magicblock-labs/ephemeral-spl-token.git",
+        "commit": "41476b754747f5555fbee92e0d2a57477150b912"
+      },
+      "privateEphemeralRollups": {
+        "minimumSdk": "0.14.2",
+        "installedSdk": "0.18.0",
+        "quickstartRecommended": {
+          "rust": "1.89.0",
+          "node": "24.10.0",
+          "solana": "3.1.9",
+          "anchor": "1.0.2"
+        },
+        "implementationProfiles": {
+          "agentExchange": "Node.js 24 Lambda with the official JavaScript SDK and @solana/web3.js; no local Solana program is embedded.",
+          "wallet": "@solana/kit and @solana/web3.js client integration; the wallet signs provider-prepared transactions locally.",
+          "x402Product": "PrivatePAY and PDAO Wallet provide the customer-facing x402 product and API. MagicBlock supplies the exact-magicblock private SPL settlement scheme.",
+          "providerProgram": "The official ephemeral-spl-token source uses native Rust and Pinocchio. It is referenced as the settlement implementation, not copied or forked into this service.",
+          "anchor": "Anchor 1.0.2 is the current MagicBlock quickstart profile. Anchor 0.32.1 is a separate compatibility profile and must not be mixed into the same workspace."
+        },
+        "note": "The quickstart versions are recommendations and other versions may work. The Lambda service uses the project-wide Node 24 runtime."
+      }
+    },
+    {
+      "id": "solana",
+      "publisher": "Solana Foundation",
+      "officialMcp": "mcp__solana_mcp",
+      "officialContract": "https://solana.com/docs"
+    },
+    {
+      "id": "robinhood-chain",
+      "publisher": "Robinhood",
+      "officialDocs": "https://docs.robinhood.com/chain/",
+      "mcpGap": "No publisher-operated Robinhood Chain MCP server is configured. Mainnet reads are limited to verified JSON-RPC chain identity and read-only EVM evidence; swap quotes and market snapshots remain unsupported."
+    },
+    {
+      "id": "alchemy",
+      "publisher": "Alchemy",
+      "officialMcp": "mcp__alchemy",
+      "officialContract": "https://www.alchemy.com/docs"
+    },
+    {
+      "id": "x402",
+      "publisher": "x402",
+      "officialMcp": "mcp__x402_docs",
+      "officialContract": "https://docs.x402.org"
+    },
+    {
+      "id": "github",
+      "publisher": "GitHub",
+      "officialMcp": "mcp__github",
+      "officialContract": "https://docs.github.com/actions"
+    },
+    {
+      "id": "mongodb",
+      "publisher": "MongoDB",
+      "officialDocs": "https://www.mongodb.com/docs",
+      "mcpGap": "No publisher-operated MongoDB MCP server is configured in this project."
+    }
+  ],
+  "requiredHooks": [
+    {
+      "file": "AGENTS.md",
+      "contains": "PROVIDER_CONFORMANCE_GATE: critical"
+    },
+    {
+      "file": "package.json",
+      "contains": "\"provider:gate\""
+    },
+    {
+      "file": ".nvmrc",
+      "contains": "24.10.0"
+    },
+    {
+      "file": "scripts/package-lambda.sh",
+      "contains": "provider-conformance-gate.mjs --surface lambda"
+    },
+    {
+      "file": ".github/workflows/agent-exchange.yml",
+      "contains": "npm run provider:gate"
+    },
+    {
+      "file": ".github/workflows/agent-exchange-deploy.yml",
+      "contains": "npm run provider:gate -- --surface lambda"
+    }
+  ]
+}

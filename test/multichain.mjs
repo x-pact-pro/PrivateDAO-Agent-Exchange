@@ -160,6 +160,13 @@ test("Alchemy URLs are constructed without exposing the key in results", () => {
   assert.equal(getConfig({ ALCHEMY_API_KEY: "test-only-key" }).rpcSecondary, "https://solana-mainnet.g.alchemy.com/v2/test-only-key");
 });
 
+test("Robinhood Chain uses its documented RPC endpoint unless one is explicitly configured", () => {
+  const endpoint = "https://rpc.example/robinhood";
+  assert.equal(evmRpcUrl({ evmRpcUrls: { "robinhood-mainnet": endpoint } }, "robinhood:mainnet"), endpoint);
+  assert.equal(evmRpcUrl({ alchemyApiKey: "test-only-key", evmRpcUrls: {} }, "robinhood-mainnet"), "https://rpc.mainnet.chain.robinhood.com");
+  assert.equal(getConfig({ PDAO_EVM_ROBINHOOD_MAINNET_RPC_URL: endpoint }).evmRpcUrls["robinhood-mainnet"], endpoint);
+});
+
 test("malformed runtime numeric settings fall back to bounded safe values", () => {
   const config = getConfig({
     AGENT_EXCHANGE_MAX_BODY_BYTES: "not-a-number",
@@ -189,6 +196,7 @@ test("EVM health verifies every production read-only chain ID", async () => {
     "ethereum-mainnet": "0x1",
     "base-mainnet": "0x2105",
     "arbitrum-mainnet": "0xa4b1",
+    "robinhood-mainnet": "0x1237",
   };
   global.fetch = async (url, options) => {
     const network = new URL(url).pathname.slice(1);
@@ -436,13 +444,18 @@ test("payment verification rejects a finalized transaction that predates its quo
 test("Solana reads fall back from a rate-limited primary provider", async () => {
   const originalFetch = global.fetch;
   const originalNodeEnv = process.env.NODE_ENV;
+  const originalRpcFixture = process.env.AGENT_EXCHANGE_RPC_FIXTURE;
   process.env.NODE_ENV = "test";
+  delete process.env.AGENT_EXCHANGE_RPC_FIXTURE;
   const seen = [];
   global.fetch = async (url, options) => {
     seen.push(url);
     if (url.includes("primary")) return new Response("rate limited", { status: 429 });
     const request = JSON.parse(options.body);
-    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: request.method === "getBalance" ? { value: 7 } : null }), {
+    const result = request.method === "getGenesisHash"
+      ? "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"
+      : request.method === "getBalance" ? { value: 7 } : null;
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -453,16 +466,21 @@ test("Solana reads fall back from a rate-limited primary provider", async () => 
       treasury: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
       usdcMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       rpcPrimary: "https://primary.example",
-      rpcSecondary: "https://secondary.example",
+      rpcSecondary: "https://secondary-fallback.example",
       rpcFallback: "https://fallback.example",
       mainnetGenesisHash: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
     }, "getBalance", ["2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL"]);
     assert.equal(result.result.value, 7);
-    assert.deepEqual(seen, ["https://primary.example", "https://secondary.example"]);
+    assert.deepEqual(seen, [
+      "https://primary.example",
+      "https://secondary-fallback.example", "https://secondary-fallback.example",
+    ]);
   } finally {
     global.fetch = originalFetch;
     if (originalNodeEnv == null) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = originalNodeEnv;
+    if (originalRpcFixture == null) delete process.env.AGENT_EXCHANGE_RPC_FIXTURE;
+    else process.env.AGENT_EXCHANGE_RPC_FIXTURE = originalRpcFixture;
   }
 });
 
@@ -473,6 +491,7 @@ test("Solana health reports the required read-only checks", async () => {
   global.fetch = async (_url, options) => {
     const request = JSON.parse(options.body);
     const result = {
+      getGenesisHash: "5eykt4UsFv8P8NJdTREp1YvzqKqZKvdpKuc147dw2N9d",
       getHealth: "ok",
       getVersion: { "solana-core": "test-version" },
       getSlot: 123,
@@ -603,6 +622,9 @@ test("Solana token evidence remains useful when optional methods are unavailable
   process.env.NODE_ENV = "test";
   global.fetch = async (_url, options) => {
     const request = JSON.parse(options.body);
+    if (request.method === "getGenesisHash") return new Response(JSON.stringify({
+      jsonrpc: "2.0", id: 1, result: "5eykt4UsFv8P8NJdTREp1YvzqKqZKvdpKuc147dw2N9d",
+    }), { status: 200, headers: { "content-type": "application/json" } });
     const result = request.method === "getAccountInfo"
       ? { value: { owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", data: { parsed: { info: { mintAuthority: null, freezeAuthority: null } } } } }
       : null;
@@ -644,6 +666,9 @@ test("Solana evidence exposes provider class, never authenticated RPC URLs", asy
   process.env.NODE_ENV = "test";
   global.fetch = async (_url, options) => {
     const request = JSON.parse(options.body);
+    if (request.method === "getGenesisHash") return new Response(JSON.stringify({
+      jsonrpc: "2.0", id: 1, result: "5eykt4UsFv8P8NJdTREp1YvzqKqZKvdpKuc147dw2N9d",
+    }), { status: 200, headers: { "content-type": "application/json" } });
     const result = request.method === "getAccountInfo"
       ? { value: { owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", data: { parsed: { info: { mintAuthority: null, freezeAuthority: null } } } } }
       : request.method === "getTokenSupply"

@@ -6,7 +6,7 @@
 
 **Product type:** SaaS/API independent product. Recommended access method: Alibaba Cloud Marketplace SPI mode for subscription entitlement, with the payment API remaining a separately authenticated capability.
 
-**Product URL:** https://agents.privatedao.org/services/privatepay-x402
+**Product URL:** https://agent.pdaowallet.com/services/privatepay-x402
 
 **Short description:**
 
@@ -60,8 +60,8 @@ The Alibaba SPI adapter provisions a subscription entitlement only. It does not 
 
 ## Evidence and demo
 
-- Product page: https://agents.privatedao.org/services/privatepay-x402
-- Marketplace: https://agents.privatedao.org/marketplace
+- Product page: https://agent.pdaowallet.com/services/privatepay-x402
+- Marketplace: https://agent.pdaowallet.com/marketplace
 - Integration guide: https://sealkeeper.run/docs/integrate
 
 No private-payment production capability is claimed by this pack without an independently reviewable settlement receipt.

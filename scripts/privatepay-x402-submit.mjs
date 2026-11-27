@@ -73,7 +73,7 @@ if (payerIndex < 0 || !signedTransaction.signatures[payerIndex] || signedTransac
 if (!nacl.sign.detached.verify(signedMessage, signedTransaction.signatures[payerIndex], signedTransaction.message.staticAccountKeys[payerIndex].toBytes()))
   throw new Error("Payer signature does not verify against the inspected transaction message");
 
-const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "eu-north-1" });
+const client = new SecretsManagerClient({ region: process.env.AWS_REGION || "us-east-1" });
 const secretResponse = await client.send(new GetSecretValueCommand({ SecretId: process.env.PRIVATEPAY_SECRET_ID || "pdao/agent-exchange/privatepay-production" }));
 const secret = JSON.parse(secretResponse.SecretString || "{}");
 if (!secret.PRIVATEPAY_FACILITATOR_API_KEY || !secret.PRIVATEPAY_MERCHANT_ID) throw new Error("PrivatePAY merchant credentials are incomplete");

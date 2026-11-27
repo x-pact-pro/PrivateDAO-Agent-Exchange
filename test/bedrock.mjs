@@ -12,7 +12,7 @@ test("Bedrock is disabled by default and does not call AWS", async () => {
 test("Bedrock synthesis is bounded to evidence and never returns an execution capability", async () => {
   let command;
   const result = await runBedrockInference(
-    { bedrockEnabled: true, bedrockModel: "amazon.nova-micro-v1:0", region: "eu-north-1" },
+    { bedrockEnabled: true, bedrockModel: "amazon.nova-micro-v1:0", region: "us-east-1" },
     { evidence: { risk: "medium" }, requested_output: "risk summary" },
     { send: async (value) => { command = value; return { output: { message: { content: [{ text: "bounded summary" }] } }, usage: { inputTokens: 10, outputTokens: 2 }, stopReason: "end_turn" }; } },
   );

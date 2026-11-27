@@ -56,10 +56,13 @@ function nonEmpty(value) {
 
 const SOLANA_MAINNET_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
-// MagicBlock's REST API names Solana mainnet "mainnet", while x402 and the
-// rest of Agent Exchange use the canonical "mainnet-beta" network id.
+// Private MagicBlock reads must use the TEE-backed cluster. The ordinary
+// "mainnet" cluster can issue mock challenges that cannot authorize private
+// balance reads.
 function providerCluster(config) {
   const cluster = String(config.privatePayCluster || "").trim();
+  if (isMagicBlockRail(config) && (!cluster || cluster === "mainnet" || cluster === "mainnet-beta" || cluster === MAGICBLOCK_PRIVATE_CLUSTER))
+    return MAGICBLOCK_PRIVATE_CLUSTER;
   return cluster === "mainnet-beta" || !cluster ? "mainnet" : cluster;
 }
 
@@ -823,6 +826,12 @@ export async function createPrivatePayCheckout(config, input = {}, fetchImpl = f
   const payer = String(input.payer || "").trim();
   if (!SOLANA_ADDRESS.test(payer))
     throw Object.assign(new Error("payer must be a valid Solana address"), { statusCode: 400, code: "PRIVATEPAY_INVALID_PAYER" });
+  const merchantId = String(config.privatePayMerchantId || "").trim();
+  if (merchantId && payer === merchantId)
+    throw Object.assign(new Error("PrivatePAY requires a paying wallet different from the merchant wallet"), {
+      statusCode: 400,
+      code: "PRIVATEPAY_PAYER_EQUALS_MERCHANT",
+    });
   const resource = String(input.resource || "").trim();
   if (!resource || resource.length > 2048)
     throw Object.assign(new Error("resource must be a non-empty URI of at most 2048 characters"), { statusCode: 400, code: "PRIVATEPAY_INVALID_RESOURCE" });
@@ -1044,8 +1053,16 @@ export function assertPrivatePayPaymentPayload(payload) {
     throw Object.assign(new Error("PrivatePAY payment does not match the required scheme or Mainnet network"), { statusCode: 400, code: "PRIVATEPAY_PAYMENT_MISMATCH" });
   if (accepted.asset !== required.asset || accepted.amount !== required.amount || accepted.payTo !== required.payTo || accepted.extra?.request_id !== required.extra?.request_id)
     throw Object.assign(new Error("PrivatePAY payment does not match the quoted requirements"), { statusCode: 400, code: "PRIVATEPAY_PAYMENT_MISMATCH" });
-  if (required.scheme === MAGICBLOCK_SCHEME && (accepted.extra?.cluster !== required.extra?.cluster || accepted.extra?.settlement !== required.extra?.settlement))
-    throw Object.assign(new Error("MagicBlock payment does not match the quoted private settlement rail"), { statusCode: 400, code: "PRIVATEPAY_PAYMENT_MISMATCH" });
+  if (required.scheme === MAGICBLOCK_SCHEME) {
+    const exactFields = ["paymentId", "payer", "merchantId", "resource", "cluster", "settlement", "paymentFlow", "transaction"];
+    const mismatch = accepted.maxTimeoutSeconds !== required.maxTimeoutSeconds
+      || exactFields.some((field) => accepted.extra?.[field] !== required.extra?.[field]);
+    if (mismatch)
+      throw Object.assign(new Error("MagicBlock payment does not match the exact original checkout requirements"), {
+        statusCode: 400,
+        code: "PRIVATEPAY_PAYMENT_MISMATCH",
+      });
+  }
   const privatePayload = payment.payload;
   if (required.scheme === MAGICBLOCK_SCHEME) {
     if (!privatePayload || typeof privatePayload !== "object" || Array.isArray(privatePayload)

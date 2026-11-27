@@ -4,6 +4,13 @@ export const UNIVERSAL_READ_NETWORKS = Object.freeze([
   "base-mainnet",
   "arbitrum-mainnet",
 ]);
+const MULTICHAIN_RPC_READ_NETWORKS = Object.freeze([
+  "solana-mainnet-beta",
+  "ethereum-mainnet",
+  "base-mainnet",
+  "arbitrum-mainnet",
+  "robinhood-mainnet",
+]);
 
 export const SERVICES = Object.freeze([
   {
@@ -34,7 +41,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and token identifier",
     output: "network, contract metadata and available on-chain evidence",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "risk.score",
@@ -44,7 +51,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and token identifier",
     output: "deterministic risk factors and evidence confidence",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "wallet.intelligence",
@@ -54,7 +61,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and wallet address",
     output: "bounded public-chain balance and activity evidence",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "wallet.bot.classify",
@@ -64,7 +71,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and wallet address",
     output: "bounded activity evidence and a cautious automation classification",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "contract.inspect",
@@ -74,7 +81,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and program or contract",
     output: "account owner, bytecode and executable-state evidence",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "launch.check",
@@ -84,7 +91,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and token or mint",
     output: "pre-decision launch evidence",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "market.snapshot",
@@ -104,7 +111,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and asset identifier",
     output: "on-chain facts, labeled signals and evidence references",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "research.wallet",
@@ -114,7 +121,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and wallet address",
     output: "public balance, activity and asset evidence",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "contract.explain",
@@ -124,7 +131,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and contract or program address",
     output: "deterministic bytecode, ownership and execution facts",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "transaction.explain",
@@ -134,7 +141,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and transaction hash or signature",
     output: "pre-sign simulation or structured transaction facts and failure context",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "anomaly.detect",
@@ -144,7 +151,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and asset or wallet subject",
     output: "deterministic anomaly signals with evidence and no unsupported labels",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "agent.research.report",
@@ -154,7 +161,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and asset or wallet subject",
     output: "structured facts, labeled signals, evidence digest and receipt",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "portfolio.intelligence",
@@ -164,7 +171,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and up to 10 asset identifiers",
     output: "asset-by-asset facts, signals, failures and evidence digest",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "swap.quote",
@@ -184,7 +191,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and unsigned transaction",
     output: "simulation result, estimated gas and deterministic errors",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "decision.context",
@@ -234,7 +241,7 @@ export const SERVICES = Object.freeze([
     access: "paid",
     input: "network and public address",
     output: "read-only transaction summary",
-    supportedNetworks: ["solana-mainnet-beta", "ethereum-mainnet", "base-mainnet", "arbitrum-mainnet"],
+    supportedNetworks: MULTICHAIN_RPC_READ_NETWORKS,
   },
   {
     id: "agent.match",

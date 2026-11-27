@@ -15,7 +15,7 @@ Website and token metadata are included in each compatible manifest:
 ## ChatGPT
 
 1. Open Plugins and choose Add (+).
-2. If the account offers Plugin Creator, create a plugin and add the remote MCP app at `https://agents.privatedao.org/mcp`.
+2. If the account offers Plugin Creator, create a plugin and add the remote MCP app at `https://agent.pdaowallet.com/mcp`.
 3. If ZIP upload is enabled for the workspace, upload `privatedao-agent-plugin.zip`.
 4. Review the included instructions and skills.
 5. Test `list_catalog`, `privatepay_status`, and a read-only service before enabling paid actions.
@@ -27,7 +27,7 @@ Use `config/host-connection-profiles.md` as the source of truth. The connection 
 
 - Name: `PrivateDAO Agent Exchange`
 - Description: `27 commercial verification, intelligence, and private payment services across four networks, including PrivatePAY x402 on Solana Mainnet.`
-- Server URL: `https://agents.privatedao.org/mcp`
+- Server URL: `https://agent.pdaowallet.com/mcp`
 - Authentication: `None`
 
 Upload `assets/PrivateDAO_MCP_Icon_256.png` when the host requests an icon. Leave advanced OAuth settings empty unless a future deployment publishes an OAuth issuer and client configuration.
