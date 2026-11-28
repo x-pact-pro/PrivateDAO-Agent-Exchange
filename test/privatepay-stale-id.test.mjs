@@ -22,6 +22,7 @@ Object.assign(process.env, {
   PRIVATEPAY_FACILITATOR_API_KEY: "fixture-merchant-key",
   PRIVATEPAY_PROVIDER_HANDLE: "provider@magicblock.id",
   PRIVATEPAY_PAYMENT_INGRESS: "So11111111111111111111111111111111111111112",
+  PRIVATEPAY_X402_PAY_TO: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
 });
 for (const flag of [
   "CONFORMANCE_VERIFIED", "MAINNET_VERIFIED", "RELATIONSHIP_PRIVACY_VERIFIED", "AMOUNT_PRIVACY_VERIFIED",
@@ -74,7 +75,15 @@ test("retrying a superseded failed id uses the current bound replacement", async
           asset: mint, amount: input.amount_base_units,
           payTo: "2BJ4ezxqV9YJXc38D9duKBkdn4su4jE1beKUHwH663sL",
           maxTimeoutSeconds: 60,
-          extra: { paymentId: id, cluster: "mainnet-private", settlement: "ephemeral-rollup", transaction: "AQID" },
+          extra: {
+            paymentId: id,
+            payer: input.payer,
+            merchantId: process.env.PRIVATEPAY_X402_PAY_TO,
+            resource: input.resource,
+            cluster: "mainnet-private",
+            settlement: "ephemeral-rollup",
+            transaction: "AQID",
+          },
         }],
       }),
     });
