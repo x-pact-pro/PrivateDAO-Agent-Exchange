@@ -491,10 +491,10 @@ test("transaction simulation rejects a transaction hash before payment", async (
 
 test("every paid job retains its validated input for post-payment execution", async () => {
   resetForTests();
-  const created = await request("/api/jobs", "POST", {
+  const created = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
     service_id: "forensics.trace",
     input: { network: "solana-mainnet-beta", wallet: "11111111111111111111111111111111", limit: 3 },
-  });
+  }));
   assert.equal(created.statusCode, 402);
   const quote = JSON.parse(created.body);
   assert.match(quote.payment_intent.jobId, /^job_/);
@@ -508,10 +508,10 @@ test("every paid job retains its validated input for post-payment execution", as
 
 test("service requests normalize accepted network aliases before quoting", async () => {
   resetForTests();
-  const created = await request("/api/jobs", "POST", {
+  const created = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
     service_id: "research.asset",
     input: { network: "ethereum:mainnet", asset: "0x0000000000000000000000000000000000000001" },
-  });
+  }));
   assert.equal(created.statusCode, 402);
   const body = JSON.parse(created.body);
   assert.equal(body.payment_intent.target_network, "ethereum-mainnet");
@@ -519,20 +519,20 @@ test("service requests normalize accepted network aliases before quoting", async
 
 test("paid agent matching remains behind the paid job flow", async () => {
   resetForTests();
-  const response = await request("/api/jobs", "POST", {
+  const response = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
     service_id: "agent.match",
     input: { capabilities: ["chains"], network: "solana" },
-  });
+  }));
   assert.equal(response.statusCode, 402);
   assert.equal(JSON.parse(response.body).payment_intent.network, "solana-mainnet-beta");
 });
 
 test("payment cannot replace the input bound to a paid quote", async () => {
   resetForTests();
-  const created = await request("/api/jobs", "POST", {
+  const created = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
     service_id: "forensics.trace",
     input: { network: "solana-mainnet-beta", wallet: "11111111111111111111111111111111", limit: 3 },
-  });
+  }));
   const jobId = JSON.parse(created.body).payment_intent.jobId;
   const tampered = await request(`/api/jobs/${jobId}/payment`, "POST", {
     signature: "not-a-real-solana-signature",
