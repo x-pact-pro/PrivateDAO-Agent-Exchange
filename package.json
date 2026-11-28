@@ -9,7 +9,8 @@
   "scripts": {
     "test:surfaces": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node --test test/surfaces.mjs",
     "test:browser": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node test/e2e/browser-seller.mjs",
-    "test": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node --test --test-concurrency=1 test/*.mjs",
+    "test": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node --test --test-concurrency=1 test/*.mjs && npm run test:elliptic-cve",
+    "test:elliptic-cve": "node scripts/test-elliptic-cve.mjs",
     "smoke": "AGENT_EXCHANGE_TEST_MODE=true AGENT_EXCHANGE_ALLOW_TEST_STORAGE=true AGENT_EXCHANGE_MCP_FETCH_FIXTURE=true AGENT_EXCHANGE_RPC_FIXTURE=true node test/smoke.mjs",
     "verify:live-surface": "node scripts/verify-live-surface.mjs",
     "verify:deployment-workflow": "node scripts/verify-deployment-workflow.mjs",
@@ -38,6 +39,7 @@
     "@magicblock-labs/ephemeral-rollups-sdk": "0.18.0",
     "@solana/web3.js": "1.98.4",
     "@x402/core": "^2.28.0",
+    "elliptic": "file:vendor/elliptic",
     "mongodb": "^6.20.0",
     "tweetnacl": "^1.0.3"
   },
@@ -47,6 +49,7 @@
     "playwright": "^1.64.1"
   },
   "overrides": {
+    "elliptic": "file:vendor/elliptic",
     "rpc-websockets": "9.3.3",
     "stream-json": "^3.6.0",
     "uuid": "^11.1.1",
