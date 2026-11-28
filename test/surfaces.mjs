@@ -451,12 +451,12 @@ test("batch checkout creates one exact quote and keeps child inputs private", as
   assert.match(response.body, /\/api\/checkout\/batch/);
   assert.match(response.body, /Review and pay exact total/);
 
-  const batch = await request("/api/checkout/batch", "POST", {
+  const batch = await withSolanaAccountInfoFixture(() => request("/api/checkout/batch", "POST", {
     items: [
       { service_id: "forensics.trace", input: { network: "solana-mainnet-beta", wallet: "11111111111111111111111111111111", limit: 2 } },
       { service_id: "agent.research.report", input: { network: "ethereum-mainnet", asset: "0x0000000000000000000000000000000000000001" } },
     ],
-  });
+  }));
   assert.equal(batch.statusCode, 402);
   const body = JSON.parse(batch.body);
   assert.equal(body.payment_intent.kind, "batch");
