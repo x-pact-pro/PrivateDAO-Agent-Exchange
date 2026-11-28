@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { handler, resetForTests } from "../src/handler.mjs";
-import { withSolanaAccountInfoFixture } from "./solana-rpc-fixture.mjs";
+import { withSolanaRpcFixture } from "./solana-rpc-fixture.mjs";
 
 process.env.NODE_ENV = "test";
 resetForTests();
@@ -51,7 +51,7 @@ const free = await request("/api/jobs", "POST", {
 assert.equal(free.statusCode, 200);
 assert.equal(JSON.parse(free.body).status, "completed");
 
-const paid = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
+const paid = await withSolanaRpcFixture(() => request("/api/jobs", "POST", {
   service_id: "agent.research.report",
   input: { network: "ethereum-mainnet", asset: "0x0000000000000000000000000000000000000001" },
 }));

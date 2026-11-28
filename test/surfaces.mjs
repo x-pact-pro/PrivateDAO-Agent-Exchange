@@ -3,7 +3,7 @@ import test from "node:test";
 import { handler, paymentStatusCode, publicRegistryAgent, resetForTests } from "../src/handler.mjs";
 import { SERVICES } from "../src/catalog.mjs";
 import { curatedTools } from "../src/exchange-metadata.mjs";
-import { withSolanaAccountInfoFixture } from "./solana-rpc-fixture.mjs";
+import { withSolanaRpcFixture } from "./solana-rpc-fixture.mjs";
 
 const request = (path, method = "GET", body, headers = {}) =>
   handler({
@@ -265,7 +265,7 @@ test("human root is HTML while machine surfaces remain available", async () => {
 
 test("product quote packages existing services without trusting client pricing", async () => {
   resetForTests();
-  const quote = await withSolanaAccountInfoFixture(() => request("/api/products/token-safety-brief/quote", "POST", {
+  const quote = await withSolanaRpcFixture(() => request("/api/products/token-safety-brief/quote", "POST", {
     input: { network: "solana-mainnet-beta", mint: "11111111111111111111111111111111" },
   }));
   assert.equal(quote.statusCode, 402);
@@ -413,7 +413,7 @@ test("a free job resolves to a public human receipt and verification page", asyn
 
 test("paid jobs validate before quoting and separate payment from target network", async () => {
   resetForTests();
-  const quote = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
+  const quote = await withSolanaRpcFixture(() => request("/api/jobs", "POST", {
     service_id: "agent.research.report",
     input: { network: "ethereum-mainnet", asset: "0x0000000000000000000000000000000000000001" },
   }));
@@ -435,7 +435,7 @@ test("paid jobs validate before quoting and separate payment from target network
   });
   assert.equal(invalidAsset.statusCode, 400);
   assert.doesNotMatch(invalidAsset.body, /payment_intent/);
-  const unsupportedEvm = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
+  const unsupportedEvm = await withSolanaRpcFixture(() => request("/api/jobs", "POST", {
     service_id: "launch.check",
     input: { network: "ethereum-mainnet", asset: "0x0000000000000000000000000000000000000001" },
   }));
@@ -451,7 +451,7 @@ test("batch checkout creates one exact quote and keeps child inputs private", as
   assert.match(response.body, /\/api\/checkout\/batch/);
   assert.match(response.body, /Review and pay exact total/);
 
-  const batch = await withSolanaAccountInfoFixture(() => request("/api/checkout/batch", "POST", {
+  const batch = await withSolanaRpcFixture(() => request("/api/checkout/batch", "POST", {
     items: [
       { service_id: "forensics.trace", input: { network: "solana-mainnet-beta", wallet: "11111111111111111111111111111111", limit: 2 } },
       { service_id: "agent.research.report", input: { network: "ethereum-mainnet", asset: "0x0000000000000000000000000000000000000001" } },
@@ -491,7 +491,7 @@ test("transaction simulation rejects a transaction hash before payment", async (
 
 test("every paid job retains its validated input for post-payment execution", async () => {
   resetForTests();
-  const created = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
+  const created = await withSolanaRpcFixture(() => request("/api/jobs", "POST", {
     service_id: "forensics.trace",
     input: { network: "solana-mainnet-beta", wallet: "11111111111111111111111111111111", limit: 3 },
   }));
@@ -508,7 +508,7 @@ test("every paid job retains its validated input for post-payment execution", as
 
 test("service requests normalize accepted network aliases before quoting", async () => {
   resetForTests();
-  const created = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
+  const created = await withSolanaRpcFixture(() => request("/api/jobs", "POST", {
     service_id: "research.asset",
     input: { network: "ethereum:mainnet", asset: "0x0000000000000000000000000000000000000001" },
   }));
@@ -519,7 +519,7 @@ test("service requests normalize accepted network aliases before quoting", async
 
 test("paid agent matching remains behind the paid job flow", async () => {
   resetForTests();
-  const response = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
+  const response = await withSolanaRpcFixture(() => request("/api/jobs", "POST", {
     service_id: "agent.match",
     input: { capabilities: ["chains"], network: "solana" },
   }));
@@ -529,7 +529,7 @@ test("paid agent matching remains behind the paid job flow", async () => {
 
 test("payment cannot replace the input bound to a paid quote", async () => {
   resetForTests();
-  const created = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
+  const created = await withSolanaRpcFixture(() => request("/api/jobs", "POST", {
     service_id: "forensics.trace",
     input: { network: "solana-mainnet-beta", wallet: "11111111111111111111111111111111", limit: 3 },
   }));
@@ -759,7 +759,7 @@ test("MCP lifecycle, schemas, errors, and network aliases are protocol-safe", as
 
   const match = JSON.parse((await request("/mcp", "POST", { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "discover_agents", arguments: { capabilities: ["chains"], network: "solana:mainnet-beta" } } })).body);
   assert.equal(match.result.isError, undefined);
-  const stats = JSON.parse((await request("/mcp", "POST", { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "list_catalog", arguments: { filter: "network" } } })).body);
+  const stats = JSON.parse((await withSolanaRpcFixture(() => request("/mcp", "POST", { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "list_catalog", arguments: { filter: "network" } } }))).body);
   assert.ok(stats.result.structuredContent.network.networks["solana-mainnet-beta"]);
   assert.ok(stats.result.structuredContent.network.networks["base-mainnet"]);
 });

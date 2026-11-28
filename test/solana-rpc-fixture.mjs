@@ -3,7 +3,19 @@ const SOLANA_RPC_HOSTS = new Set([
   "solana-mainnet.g.alchemy.com",
 ]);
 
-export async function withSolanaAccountInfoFixture(operation) {
+const SOLANA_RPC_RESULTS = {
+  getAccountInfo: { context: { slot: 1 }, value: null },
+  getEpochInfo: {
+    absoluteSlot: 1,
+    blockHeight: 1,
+    epoch: 0,
+    slotIndex: 1,
+    slotsInEpoch: 432000,
+    transactionCount: 0,
+  },
+};
+
+export async function withSolanaRpcFixture(operation) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init = {}) => {
     const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
@@ -14,11 +26,11 @@ export async function withSolanaAccountInfoFixture(operation) {
       // Leave non-URL and non-RPC requests to the real fetch implementation.
     }
 
-    if (body?.method === "getAccountInfo" && SOLANA_RPC_HOSTS.has(hostname)) {
+    if (Object.hasOwn(SOLANA_RPC_RESULTS, body?.method) && SOLANA_RPC_HOSTS.has(hostname)) {
       return new Response(JSON.stringify({
         jsonrpc: "2.0",
         id: body.id,
-        result: { context: { slot: 1 }, value: null },
+        result: SOLANA_RPC_RESULTS[body.method],
       }), {
         status: 200,
         headers: { "content-type": "application/json" },
