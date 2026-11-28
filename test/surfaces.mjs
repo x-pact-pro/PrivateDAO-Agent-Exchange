@@ -3,6 +3,7 @@ import test from "node:test";
 import { handler, paymentStatusCode, publicRegistryAgent, resetForTests } from "../src/handler.mjs";
 import { SERVICES } from "../src/catalog.mjs";
 import { curatedTools } from "../src/exchange-metadata.mjs";
+import { withSolanaAccountInfoFixture } from "./solana-rpc-fixture.mjs";
 
 const request = (path, method = "GET", body, headers = {}) =>
   handler({
@@ -264,9 +265,9 @@ test("human root is HTML while machine surfaces remain available", async () => {
 
 test("product quote packages existing services without trusting client pricing", async () => {
   resetForTests();
-  const quote = await request("/api/products/token-safety-brief/quote", "POST", {
+  const quote = await withSolanaAccountInfoFixture(() => request("/api/products/token-safety-brief/quote", "POST", {
     input: { network: "solana-mainnet-beta", mint: "11111111111111111111111111111111" },
-  });
+  }));
   assert.equal(quote.statusCode, 402);
   const intent = JSON.parse(quote.body).payment_intent;
   assert.equal(intent.product_id, "token-safety-brief");
@@ -412,10 +413,10 @@ test("a free job resolves to a public human receipt and verification page", asyn
 
 test("paid jobs validate before quoting and separate payment from target network", async () => {
   resetForTests();
-  const quote = await request("/api/jobs", "POST", {
+  const quote = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
     service_id: "agent.research.report",
     input: { network: "ethereum-mainnet", asset: "0x0000000000000000000000000000000000000001" },
-  });
+  }));
   assert.equal(quote.statusCode, 402);
   const quoteBody = JSON.parse(quote.body);
   assert.equal(quoteBody.payment_intent.network, "solana-mainnet-beta");
@@ -434,10 +435,10 @@ test("paid jobs validate before quoting and separate payment from target network
   });
   assert.equal(invalidAsset.statusCode, 400);
   assert.doesNotMatch(invalidAsset.body, /payment_intent/);
-  const unsupportedEvm = await request("/api/jobs", "POST", {
+  const unsupportedEvm = await withSolanaAccountInfoFixture(() => request("/api/jobs", "POST", {
     service_id: "launch.check",
     input: { network: "ethereum-mainnet", asset: "0x0000000000000000000000000000000000000001" },
-  });
+  }));
   assert.equal(unsupportedEvm.statusCode, 402);
   assert.match(unsupportedEvm.body, /payment_intent/);
 });
